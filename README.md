@@ -8,8 +8,7 @@ Before using this repository, you will need the following:
 - PowerShell 7.0 or higher
 
 ## How to use
-The usage of each template and script is explained in zenn.dev below.
-[https://zenn.dev/sugar3kg](https://zenn.dev/sugar3kg)
+The usage of each template and script is explained in [zenn.dev](https://zenn.dev/sugar3kg).
 
 
 ## Contact Us

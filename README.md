@@ -1,13 +1,16 @@
-## はじめに
-このレポジトリは、Microsoft Defender、Microsoft Sentinel、およびその他の Azure セキュリティ機能を最大限に活用するための Azure Resource Manager (ARM) テンプレートと PowerShell スクリプトを提供しています。
+## Overview
+This repository provides Azure Resource Manager (ARM) templates and PowerShell scripts to get the most out of Microsoft Defender, Microsoft Sentinel, and other Azure security features. This repository provides Azure Resource Manager (ARM) templates and PowerShell scripts to take full advantage of Microsoft Defender, Microsoft Sentinel and other Azure security features.
 
-## 前提条件
+## Prerequisites
+Before using this repository, you will need the following:
 
-このリポジトリを使用する前に、以下が必要です:
+- Azure Subscription
+- PowerShell 7.0 or higher
 
-- Azure サブスクリプション
-- PowerShell 7.0 以上
+## How to use
+The usage of each template and script is explained in zenn.dev below.
+[https://zenn.dev/sugar3kg](https://zenn.dev/sugar3kg)
 
-## お問い合わせ
 
-質問がある場合は、[GitHub Issues](https://github.com/katsato-ms/Microsoft/issues) を通じてお問い合わせください。
+## Contact Us
+If you have any questions, please contact us via [GitHub Issues](https://github.com/katsato-ms/Microsoft/issues).

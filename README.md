@@ -1,7 +1,7 @@
-# Microsoft Defender and Azure Security Repository
+## はじめに
 このレポジトリは、Microsoft Defender、Microsoft Sentinel、およびその他の Azure セキュリティ機能を最大限に活用するための Azure Resource Manager (ARM) テンプレートと PowerShell スクリプトを提供しています。
 
-### 前提条件
+## 前提条件
 
 このリポジトリを使用する前に、以下が必要です:
 

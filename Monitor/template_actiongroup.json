@@ -1,0 +1,88 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "actionGroupName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the Action Group"
+      }
+    },
+    "shortName": {
+      "type": "string",
+      "metadata": {
+        "description": "Short name of the Action Group"
+      }
+    },
+    "emailReceiverName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the email receiver"
+      }
+    },
+    "emailAddress": {
+      "type": "string",
+      "metadata": {
+        "description": "Email address to send notifications to"
+      }
+    },
+    "smsReceiverName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the SMS receiver"
+      }
+    },
+    "countryCode": {
+      "type": "string",
+      "metadata": {
+        "description": "Country code of the SMS receiver"
+      }
+    },
+    "phoneNumber": {
+      "type": "string",
+      "metadata": {
+        "description": "Phone number to send SMS notifications to"
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Insights/actionGroups",
+      "apiVersion": "2019-06-01",
+      "location": "global",
+      "name": "[parameters('actionGroupName')]",
+      "properties": {
+        "groupShortName": "[parameters('shortName')]",
+        "enabled": true,
+        "emailReceivers": [
+          {
+            "name": "[parameters('emailReceiverName')]",
+            "emailAddress": "[parameters('emailAddress')]",
+            "status": "Enabled",
+            "useCommonAlertSchema": true
+          }
+        ],
+        "smsReceivers": [
+          {
+            "name": "[parameters('smsReceiverName')]",
+            "countryCode": "[parameters('countryCode')]",
+            "phoneNumber": "[parameters('phoneNumber')]",
+            "status": "Enabled"
+          }
+        ],
+        "armRoleReceivers": [
+          {
+              "name": "Monitoring Contributor",
+              "roleId": "749f88d5-cbae-40b8-bcfc-e573ddc772fa",
+              "useCommonAlertSchema": true
+          },
+          {
+              "name": "Monitoring Reader",
+              "roleId": "43d0d8ad-25c7-4714-9337-8ba259a9fe05",
+              "useCommonAlertSchema": true
+          }
+        ]
+      }
+    }
+  ]
+}

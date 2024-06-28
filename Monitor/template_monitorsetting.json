@@ -1,0 +1,69 @@
+{  
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",  
+  "contentVersion": "1.0.0.0",  
+  "parameters": {  
+    "resourceGroupName": {  
+      "type": "string",  
+      "metadata": {  
+        "description": "resource group name"  
+      }  
+    },  
+    "logAnalyticsWorkspaceName": {  
+      "type": "string",  
+      "metadata": {  
+        "description": "log analytics workspace name"  
+      }  
+    },  
+    "resourceGroupLocation": {  
+      "type": "string",
+      "metadata": {  
+        "description": "resource group location"  
+      }  
+    },
+    "guidValue": {
+      "type": "string",
+      "defaultValue": "[newGuid()]"
+    }
+  },  
+  "resources": [
+    {
+      "name": "[parameters('resourceGroupName')]",
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2019-10-01",
+      "location": "[parameters('resourceGroupLocation')]"
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-10-01",
+      "name": "[concat('nestedAutomationDeployment', '_', parameters('guidValue'))]",
+      "resourceGroup": "[parameters('resourceGroupName')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/resourceGroups/', parameters('resourceGroupName'))]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {},
+          "variables": {},
+          "resources": [
+            {  
+              "type": "Microsoft.OperationalInsights/workspaces",  
+              "apiVersion": "2020-08-01",  
+              "name": "[parameters('logAnalyticsWorkspaceName')]",  
+              "location": "[parameters('resourceGroupLocation')]",  
+              "properties": {  
+                "sku": {  
+                  "name": "PerGB2018"  
+                },  
+                "retentionInDays": 30  
+              }  
+            }
+          ]
+        }
+      }
+    }
+  ],  
+  "outputs": {}  
+}

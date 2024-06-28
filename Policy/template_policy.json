@@ -1,0 +1,72 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "exemptionResourceGroupName": {
+            "type": "string",
+            "metadata": {
+                "description": "The resource group of the policy exemption"
+            }
+        },
+        "guidValue": {
+            "type": "string",
+            "defaultValue": "[newGuid()]"
+        }
+    },
+    "resources": [
+      {
+        "type": "Microsoft.Authorization/policyAssignments",
+        "apiVersion": "2021-06-01",
+        "name": "allowedLocationsPolicyAssignment",
+        "properties": {
+          "displayName": "Allowed Locations Policy Assignment",
+          "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/e56962a6-4747-49cd-b67b-bf8b01975c4c",
+          "scope": "[subscription().id]",
+          "parameters": {
+            "listOfAllowedLocations": {
+              "value": [
+                "japaneast",
+                "japanwest",
+                "eastus",
+                "westus"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "type": "Microsoft.Resources/deployments",
+        "apiVersion": "2019-10-01",
+        "name": "[concat('nestedDeployment', '_', parameters('guidValue'))]",
+        "resourceGroup": "[parameters('exemptionResourceGroupName')]",
+        "dependsOn": [
+            "[resourceId('Microsoft.Authorization/policyAssignments', 'allowedLocationsPolicyAssignment')]"
+        ],
+        "properties": {
+          "mode": "Incremental",
+          "template": {
+            "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+            "contentVersion": "1.0.0.0",
+            "parameters": {},
+            "variables": {},
+            "resources": [
+                {
+                    "type": "Microsoft.Authorization/policyExemptions",
+                    "apiVersion": "2022-07-01-preview",
+                    "name": "allowedLocationsPolicyExemption",
+                    "properties": {
+                      "displayName": "Allowed Locations Policy Exemption",
+                      "description": "Exemption for specific resource",
+                      "policyAssignmentId": "[resourceId('Microsoft.Authorization/policyAssignments', 'allowedLocationsPolicyAssignment')]",
+                      "exemptionCategory": "Waiver",
+                      "expiresOn": null,
+                      "metadata": {}
+                    }
+                }
+            ]
+          }
+        }
+      }
+    ]
+  }
+  

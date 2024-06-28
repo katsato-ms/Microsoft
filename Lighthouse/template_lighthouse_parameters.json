@@ -1,0 +1,30 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "mspOfferName": {
+            "value": "Lighthouse to managed tenant"
+        },
+        "mspOfferDescription": {
+            "value": "Lighthouse to managed tenant"
+        },
+        "managedByTenantId": {
+            "value": "your managed tenant id"
+        },
+        "authorizations": {
+            "value": [
+                { 
+                    "principalId": "your principal id", 
+                    "roleDefinitionId": "b24988ac-6180-42a0-ab88-20f7382dd24c",
+                    "principalIdDisplayName": "contributor-gp" 
+                }, 
+                { 
+                    "principalId": "your principal id",
+                    "roleDefinitionId": "fb1c8493-542b-48eb-b624-b4c8fea62acd",
+                    "principalIdDisplayName": "secadmin-gp"
+                    
+                }
+            ]
+        }                
+    }
+}

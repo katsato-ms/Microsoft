@@ -1,0 +1,65 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+      "alertRuleName": {
+          "defaultValue": "DefenderForCloudAlert",
+          "type": "String"
+      },
+      "alertRuleDescription": {
+          "type": "String"
+      },
+      "workspaceId": {
+          "type": "String"
+      },
+      "actiongroupId": {
+          "type": "String"
+      }
+  },
+  "variables": {},
+  "resources": [
+      {
+          "type": "microsoft.insights/scheduledqueryrules",
+          "apiVersion": "2023-03-15-preview",
+          "name": "[parameters('alertRuleName')]",
+          "location": "japaneast",
+          "properties": {
+              "displayName": "[parameters('alertRuleName')]",
+              "description": "[parameters('alertRuleDescription')]",
+              "severity": 1,
+              "enabled": true,
+              "evaluationFrequency": "PT5M",
+              "scopes": [
+                  "[parameters('workspaceId')]"
+              ],
+              "targetResourceTypes": [
+                  "Microsoft.OperationalInsights/workspaces"
+              ],
+              "windowSize": "PT5M",
+              "criteria": {
+                  "allOf": [
+                      {
+                          "query": "SecurityAlert | where ProductName == 'Azure Security Center' and AlertSeverity == 'High'",
+                          "timeAggregation": "Count",
+                          "dimensions": [],
+                          "operator": "GreaterThan",
+                          "threshold": 0,
+                          "failingPeriods": {
+                              "numberOfEvaluationPeriods": 1,
+                              "minFailingPeriodsToAlert": 1
+                          }
+                      }
+                  ]
+              },
+              "autoMitigate": false,
+              "actions": {
+                  "actionGroups": [
+                      "[parameters('actiongroupId')]"
+                  ],
+                  "customProperties": {},
+                  "actionProperties": {}
+              }
+          }
+      }
+  ]
+}

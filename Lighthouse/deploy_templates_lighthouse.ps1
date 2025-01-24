@@ -7,6 +7,9 @@ $subscriptionId = "<your subscription id>"
 # Azure PowerShell にログイン
 Connect-AzAccount -Tenant $tenantId -Subscription $subscriptionId
 
+# デプロイのロケーションを指定
+$location = "japaneast"
+
 # -----------------------------------------------------------
 # Lighthouse 設定
 # -----------------------------------------------------------

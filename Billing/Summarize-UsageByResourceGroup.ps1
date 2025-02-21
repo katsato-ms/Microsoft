@@ -111,7 +111,7 @@ Write-Host "使用する manifest.json: $ManifestFile"
 $ManifestData = Get-Content -Path $ManifestFile | ConvertFrom-Json
 
 # manifest.json に記載されている総データ行数を計算
-$ExpectedRowCount = ($ManifestData.blobs | Measure-Object -Property dataRowCount -Sum).Sum
+$ExpectedRowCount = $ManifestData.dataRowCount
 
 Write-Host "manifest.json に記載されている合計行数: $ExpectedRowCount"
 

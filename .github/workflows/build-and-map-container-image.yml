@@ -1,0 +1,35 @@
+name: Build and Map Container Image
+
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Set Permissions
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.8' 
+    # Set Authentication to Container Registry of Choice. 
+    # The example below is for Azure Container Registry. Amazon Elastic Container Registry and Google Artifact Registry are also supported. 
+      - name: Azure Container Registry Login 
+        uses: Azure/docker-login@v1 
+        with:
+          login-server: ${{ secrets.AZURE_CONTAINER_REGISTRY_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+    # Build and Push Image
+      - name: Build and Push the Docker image 
+        uses: docker/build-push-action@v2
+        with:
+          push: true
+          tags: ${{ secrets.IMAGE_TAG }}
+          file: Dockerfile
+     # Run Mapping Tool in MSDO
+      - name: Run Microsoft Security DevOps Analysis
+        uses: microsoft/security-devops-action@latest
+        id: msdo

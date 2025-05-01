@@ -152,7 +152,7 @@
                                         },
                                         "method": "post",
                                         "body": {
-                                            "To": "xxx@xxx123.com",
+                                            "To": "azureuser@celesteclouds.com",
                                             "Subject": "Sentinel Insident: @{triggerBody()?['object']?['properties']?['title']}",
                                             "Body": "<p class=\"editor-paragraph\">Title</p><p class=\"editor-paragraph\">@{triggerBody()?['object']?['properties']?['title']}</p><br><p class=\"editor-paragraph\">Description</p><p class=\"editor-paragraph\">@{triggerBody()?['object']?['properties']?['description']}</p><br><p class=\"editor-paragraph\">Severity</p><p class=\"editor-paragraph\">@{triggerBody()?['object']?['properties']?['severity']}</p>",
                                             "Importance": "Normal"
@@ -228,31 +228,10 @@
                                                 "name": "Reputation",
                                                 "value": 1
                                             }
-                                        },
-                                        "Add_comment_to_incident_(V3)": {
-                                            "runAfter": {
-                                                "Increment_variable": [
-                                                    "Succeeded"
-                                                ]
-                                            },
-                                            "type": "ApiConnection",
-                                            "inputs": {
-                                                "host": {
-                                                    "connection": {
-                                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
-                                                    }
-                                                },
-                                                "method": "post",
-                                                "body": {
-                                                    "incidentArmId": "@triggerBody()?['object']?['id']",
-                                                    "message": "<p class=\"editor-paragraph\">@{body('Submit_a_Security_Copilot_prompt')?['EvaluationResultContent']}</p>"
-                                                },
-                                                "path": "/Incidents/Comment"
-                                            }
                                         }
                                     },
                                     "runAfter": {
-                                        "Submit_a_Security_Copilot_prompt": [
+                                        "Add_comment_to_incident_(V3)": [
                                             "Succeeded"
                                         ]
                                     },
@@ -288,6 +267,27 @@
                                         ]
                                     },
                                     "type": "If"
+                                },
+                                "Add_comment_to_incident_(V3)": {
+                                    "runAfter": {
+                                        "Submit_a_Security_Copilot_prompt": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "body": {
+                                            "incidentArmId": "@triggerBody()?['object']?['id']",
+                                            "message": "<p class=\"editor-paragraph\">@{body('Submit_a_Security_Copilot_prompt')?['EvaluationResultContent']}</p>"
+                                        },
+                                        "path": "/Incidents/Comment"
+                                    }
                                 }
                             },
                             "runAfter": {

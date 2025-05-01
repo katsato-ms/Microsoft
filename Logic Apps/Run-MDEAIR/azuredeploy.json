@@ -1,0 +1,403 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "PlaybookName": {
+            "type": "String",
+            "metadata": {
+                "description": "Name of the Logic Apps resource to be created"
+            }
+        },
+        "Location": {
+            "defaultValue": "[resourceGroup().location]",
+            "type": "String",
+            "metadata": {
+                "description": "Location of the Logic Apps resource to be created"
+            }
+        }
+    },
+    "variables": {
+        "azuresentinel": "[concat('azuresentinel-', parameters('PlaybookName'))]",
+        "wdatp": "[concat('wdatp-', parameters('PlaybookName'))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2016-06-01",
+            "name": "[variables('azuresentinel')]",
+            "location": "[parameters('Location')]",
+            "properties": {
+                "displayName": "[parameters('PlaybookName')]",
+                "customParameterValues": {},
+                "api": {
+                    "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azuresentinel')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2016-06-01",
+            "name": "[variables('wdatp')]",
+            "location": "[parameters('Location')]",
+            "kind": "V1",
+            "properties": {
+                "displayName": "[parameters('PlaybookName')]",
+                "api": {
+                    "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/wdatp')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('PlaybookName')]",
+            "location": "[parameters('Location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/connections', variables('azuresentinel'))]",
+                "[resourceId('Microsoft.Web/connections', variables('wdatp'))]"
+            ],
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Microsoft_Sentinel_incident": {
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "body": {
+                                    "callback_url": "@listCallbackUrl()"
+                                },
+                                "path": "/incident-creation"
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Entities_-_Get_Hosts": {
+                            "runAfter": {},
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                                "path": "/entities/host"
+                            }
+                        },
+                        "For_each_Machine": {
+                            "foreach": "@body('Entities_-_Get_Hosts')?['Hosts']",
+                            "actions": {
+                                "Machines_-_Get_list_of_machines": {
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['wdatp']['connectionId']"
+                                            }
+                                        },
+                                        "method": "get",
+                                        "path": "/api/machines",
+                                        "queries": {
+                                            "$filter": "computerDnsName eq '@{items('For_each_Machine')?['HostName']}'",
+                                            "$count": true
+                                        }
+                                    }
+                                },
+                                "Condition_-_Machine_count_=_1": {
+                                    "actions": {
+                                        "For_each": {
+                                            "foreach": "@body('Machines_-_Get_list_of_machines')?['value']",
+                                            "actions": {
+                                                "Until": {
+                                                    "actions": {
+                                                        "Update_variable__-_InvestigationStatus": {
+                                                            "runAfter": {
+                                                                "Actions_-_Get_single_investigation_-_repeat": [
+                                                                    "Succeeded"
+                                                                ]
+                                                            },
+                                                            "type": "SetVariable",
+                                                            "inputs": {
+                                                                "name": "InvestigationStatus",
+                                                                "value": "@body('Actions_-_Get_single_investigation_-_repeat')?['state']"
+                                                            }
+                                                        },
+                                                        "Delay": {
+                                                            "runAfter": {
+                                                                "Update_variable__-_InvestigationStatus": [
+                                                                    "Succeeded"
+                                                                ]
+                                                            },
+                                                            "type": "Wait",
+                                                            "inputs": {
+                                                                "interval": {
+                                                                    "count": 1,
+                                                                    "unit": "Minute"
+                                                                }
+                                                            }
+                                                        },
+                                                        "Actions_-_Get_single_investigation_-_repeat": {
+                                                            "type": "ApiConnection",
+                                                            "inputs": {
+                                                                "host": {
+                                                                    "connection": {
+                                                                        "name": "@parameters('$connections')['wdatp']['connectionId']"
+                                                                    }
+                                                                },
+                                                                "method": "get",
+                                                                "path": "/api/investigations/@{encodeURIComponent(body('Actions_-_Start_automated_investigation_on_a_machine')?['id'])}"
+                                                            }
+                                                        }
+                                                    },
+                                                    "runAfter": {
+                                                        "Set_variable_-_InvestigationStatus": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "expression": "@not(equals(variables('InvestigationStatus'),'Running'))",
+                                                    "limit": {
+                                                        "count": 60,
+                                                        "timeout": "PT1H"
+                                                    },
+                                                    "type": "Until"
+                                                },
+                                                "Set_variable_-_InvestigationStatus": {
+                                                    "runAfter": {
+                                                        "Actions_-_Get_single_investigation": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "type": "SetVariable",
+                                                    "inputs": {
+                                                        "name": "InvestigationStatus",
+                                                        "value": "@body('Actions_-_Get_single_investigation')?['state']"
+                                                    }
+                                                },
+                                                "Actions_-_Start_automated_investigation_on_a_machine": {
+                                                    "type": "ApiConnection",
+                                                    "inputs": {
+                                                        "host": {
+                                                            "connection": {
+                                                                "name": "@parameters('$connections')['wdatp']['connectionId']"
+                                                            }
+                                                        },
+                                                        "method": "post",
+                                                        "body": {
+                                                            "Comment": "OK"
+                                                        },
+                                                        "path": "/api/machines/@{encodeURIComponent(item()?['id'])}/startInvestigation"
+                                                    }
+                                                },
+                                                "Actions_-_Get_single_investigation": {
+                                                    "runAfter": {
+                                                        "Actions_-_Start_automated_investigation_on_a_machine": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "type": "ApiConnection",
+                                                    "inputs": {
+                                                        "host": {
+                                                            "connection": {
+                                                                "name": "@parameters('$connections')['wdatp']['connectionId']"
+                                                            }
+                                                        },
+                                                        "method": "get",
+                                                        "path": "/api/investigations/@{encodeURIComponent(body('Actions_-_Start_automated_investigation_on_a_machine')?['id'])}"
+                                                    }
+                                                }
+                                            },
+                                            "type": "Foreach",
+                                            "runtimeConfiguration": {
+                                                "concurrency": {
+                                                    "repetitions": 1
+                                                }
+                                            }
+                                        },
+                                        "Condition_-_Benign": {
+                                            "actions": {},
+                                            "runAfter": {
+                                                "For_each": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "else": {
+                                                "actions": {
+                                                    "Set_variable_-_InvastigationResult_to_0": {
+                                                        "type": "SetVariable",
+                                                        "inputs": {
+                                                            "name": "InvestigationResult",
+                                                            "value": 0
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            "expression": {
+                                                "and": [
+                                                    {
+                                                        "equals": [
+                                                            "@variables('InvestigationStatus')",
+                                                            "Benign"
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            "type": "If"
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Machines_-_Get_list_of_machines": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "else": {
+                                        "actions": {
+                                            "Set_variable_-_InvastigationResult_to_0_(2)": {
+                                                "type": "SetVariable",
+                                                "inputs": {
+                                                    "name": "InvestigationResult",
+                                                    "value": 0
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "expression": {
+                                        "and": [
+                                            {
+                                                "equals": [
+                                                    "@body('Machines_-_Get_list_of_machines')?['@odata.count']",
+                                                    1
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    "type": "If"
+                                }
+                            },
+                            "runAfter": {
+                                "Initialize_variables_-_InvestigationResult": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach",
+                            "runtimeConfiguration": {
+                                "concurrency": {
+                                    "repetitions": 1
+                                }
+                            }
+                        },
+                        "Initialize_variables_-_InvestigationStatus": {
+                            "runAfter": {
+                                "Entities_-_Get_Hosts": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "InvestigationStatus",
+                                        "type": "string",
+                                        "value": "NotStarted"
+                                    }
+                                ]
+                            }
+                        },
+                        "Initialize_variables_-_InvestigationResult": {
+                            "runAfter": {
+                                "Initialize_variables_-_InvestigationStatus": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "InvestigationResult",
+                                        "type": "integer",
+                                        "value": 1
+                                    }
+                                ]
+                            }
+                        },
+                        "Condition_-_InvestigationResult_=_1": {
+                            "actions": {
+                                "Update_incident": {
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                            }
+                                        },
+                                        "method": "put",
+                                        "body": {
+                                            "incidentArmId": "@triggerBody()?['object']?['id']",
+                                            "status": "Closed",
+                                            "classification": {
+                                                "ClassificationAndReason": "FalsePositive - InaccurateData"
+                                            }
+                                        },
+                                        "path": "/Incidents"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "For_each_Machine": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "else": {
+                                "actions": {}
+                            },
+                            "expression": {
+                                "and": [
+                                    {
+                                        "equals": [
+                                            "@variables('InvestigationResult')",
+                                            1
+                                        ]
+                                    }
+                                ]
+                            },
+                            "type": "If"
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuresentinel": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('azuresentinel'))]",
+                                "connectionName": "[variables('azuresentinel')]",
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId,'/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azuresentinel')]"
+                            },
+                            "wdatp": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('wdatp'))]",
+                                "connectionName": "[variables('wdatp')]",
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/wdatp')]"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

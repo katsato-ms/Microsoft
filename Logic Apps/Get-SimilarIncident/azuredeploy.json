@@ -1,0 +1,379 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "PlaybookName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of the Logic Apps resource to be created"
+            }
+        },
+        "Location": {
+            "defaultValue": "[resourceGroup().location]",
+            "type": "string",
+            "metadata": {
+                "description": "Location of the Logic Apps resource to be created"
+            }
+        }
+    },
+    "variables": {
+        "azuresentinel": "[concat('azuresentinel-', parameters('PlaybookName'))]",
+        "azuremonitorlogs": "[concat('azuremonitorlogs-', parameters('PlaybookName'))]",
+        "azureopenai": "[concat('azureopenai-', parameters('PlaybookName'))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2016-06-01",
+            "name": "[variables('azuresentinel')]",
+            "location": "[parameters('Location')]",
+            "kind": "V1",
+            "properties": {
+                "displayName": "[parameters('PlaybookName')]",
+                "customParameterValues": {
+                },
+                "parameterValueSet": {
+                    "name": "managedIdentityAuth",
+                    "values": {}
+                },
+                "api": {
+                    "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azuresentinel')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2016-06-01",
+            "name": "[variables('azuremonitorlogs')]",
+            "location": "[parameters('Location')]",
+            "kind": "V1",
+            "properties": {
+                "displayName": "[parameters('PlaybookName')]",
+                "customParameterValues": {
+                },
+                "api": {
+                    "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azuremonitorlogs')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2016-06-01",
+            "name": "[variables('azureopenai')]",
+            "location": "[parameters('Location')]",
+            "properties": {
+                "displayName": "[parameters('PlaybookName')]",
+                "customParameterValues": {},
+                "api": {
+                    "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azureopenai')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('PlaybookName')]",
+            "location": "[parameters('Location')]",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/connections', variables('azuresentinel'))]",
+                "[resourceId('Microsoft.Web/connections', variables('azuremonitorlogs'))]",
+                "[resourceId('Microsoft.Web/connections', variables('azureopenai'))]"
+            ],
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Microsoft_Sentinel_incident": {
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "body": {
+                                    "callback_url": "@listCallbackUrl()"
+                                },
+                                "path": "/incident-creation"
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Run_query_and_list_results": {
+                            "runAfter": {},
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuremonitorlogs']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": "let lookback = 14d; // 過去 14 日分を検索対象とする\nlet incidentId = \"@{triggerBody()?['object']?['name']}\"; // 調査対象のインシデント\n// 過去 14 日分のインシデントに紐づくアラート・エンティティをリスト化\nlet EntityList = SecurityIncident\n| where TimeGenerated > ago(lookback)\n| summarize arg_max(TimeGenerated, *) by IncidentName\n| mv-expand AlertId = todynamic(AlertIds)\n| extend AlertId = tostring(AlertId)\n| join kind=inner (\n    SecurityAlert\n    | summarize arg_max(TimeGenerated, *) by SystemAlertId\n    ) on $left.AlertId == $right.SystemAlertId\n| mv-expand Entities = todynamic(Entities)\n| extend EntityType = tostring(Entities.Type)\n| extend EntityValue = case(\n    EntityType == \"account\", tostring(Entities.DisplayName),\n    EntityType == \"host\", tostring(Entities.HostName),\n    EntityType == \"ip\", tostring(Entities.Address),\n    EntityType == \"url\", tostring(Entities.Url),\n    EntityType == \"cloud-application\", tostring(Entities.Name),\n    EntityType == \"file\", tostring(Entities.Name),\n    EntityType == \"malware\", tostring(Entities.Name),\n    EntityType == \"mailbox\", tostring(Entities.MailboxPrimaryAddress),\n    \"N/A\"\n    )\n| where EntityValue != \"N/A\" and EntityValue != \"\"\n| extend IncidentArmId = replace_string(IncidentUrl,\"https://portal.azure.com/#asset/Microsoft_Azure_Security_Insights/Incident\",\"\")\n| project IncidentName, Title, SystemAlertId, AlertName, EntityType, EntityValue, IncidentArmId;\n// 対象のインシデントに紐づくアラート・エンティティをリスト化\nSecurityIncident\n| where TimeGenerated > ago(lookback)\n| where IncidentName == incidentId\n| summarize arg_max(TimeGenerated, *) by IncidentName\n| mv-expand AlertId = todynamic(AlertIds)\n| extend AlertId = tostring(AlertId)\n| join kind=inner (\n    SecurityAlert\n    | summarize arg_max(TimeGenerated, *) by SystemAlertId\n    ) on $left.AlertId == $right.SystemAlertId\n| mv-expand Entities = todynamic(Entities)\n| extend EntityType = tostring(Entities.Type)\n| extend EntityValue = case(\n    EntityType == \"account\", tostring(Entities.DisplayName),\n    EntityType == \"host\", tostring(Entities.HostName),\n    EntityType == \"ip\", tostring(Entities.Address),\n    EntityType == \"url\", tostring(Entities.Url),\n    EntityType == \"cloud-application\", tostring(Entities.Name),\n    EntityType == \"file\", tostring(Entities.Name),\n    EntityType == \"malware\", tostring(Entities.Name),\n    EntityType == \"mailbox\", tostring(Entities.MailboxPrimaryAddress),\n    \"N/A\"\n    )\n| where EntityValue != \"N/A\" and EntityValue != \"\"\n// 過去のエンティティ リストを照合\n| join kind=inner EntityList on AlertName\n| where IncidentName != IncidentName1\n// エンティティが一致する場合を抽出\n| where EntityValue == EntityValue1\n// アラート & エンティティの一致数をスコアとして算出\n| summarize SimilarityScore = count() by IncidentName, Title, IncidentName1, Title1, IncidentArmId",
+                                "path": "/queryData",
+                                "queries": {
+                                    "subscriptions": "154d3ea0-35fb-4ce5-b754-6437002f0548",
+                                    "resourcegroups": "rg-monitor",
+                                    "resourcetype": "Log Analytics Workspace",
+                                    "resourcename": "laws-cus-sentinel",
+                                    "timerange": "0"
+                                }
+                            }
+                        },
+                        "Parse_JSON_-_Query_Output": {
+                            "runAfter": {
+                                "Run_query_and_list_results": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ParseJson",
+                            "inputs": {
+                                "content": "@body('Run_query_and_list_results')?['value']",
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "IncidentName": {
+                                                "type": "string"
+                                            },
+                                            "Title": {
+                                                "type": "string"
+                                            },
+                                            "IncidentName1": {
+                                                "type": "string"
+                                            },
+                                            "Title1": {
+                                                "type": "string"
+                                            },
+                                            "IncidentArmId": {
+                                                "type": "string"
+                                            },
+                                            "SimilarityScore": {
+                                                "type": "integer"
+                                            }
+                                        },
+                                        "required": [
+                                            "IncidentName",
+                                            "Title",
+                                            "IncidentName1",
+                                            "Title1",
+                                            "IncidentArmId",
+                                            "SimilarityScore"
+                                        ]
+                                    }
+                                }
+                            }
+                        },
+                        "For_each_-_per_Incident_": {
+                            "foreach": "@outputs('Parse_JSON_-_Query_Output')['body']",
+                            "actions": {
+                                "Get_incident": {
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "body": {
+                                            "incidentArmId": "@{items('For_each_-_per_Incident_')['IncidentArmId']}"
+                                        },
+                                        "path": "/Incidents"
+                                    }
+                                },
+                                "Append_to_string_variable": {
+                                    "runAfter": {
+                                        "Get_incident": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "AppendToStringVariable",
+                                    "inputs": {
+                                        "name": "Comment",
+                                        "value": "@body('Get_incident')?['properties']?['Comments']"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Initialize_variables_-_Comment": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        },
+                        "Initialize_variables_-_Comment": {
+                            "runAfter": {
+                                "Parse_JSON_-_Query_Output": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "Comment",
+                                        "type": "string"
+                                    }
+                                ]
+                            }
+                        },
+                        "Creates_a_completion_for_the_chat_message": {
+                            "runAfter": {
+                                "For_each_-_per_Incident_": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azureopenai']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": {
+                                    "messages": [
+                                        {
+                                            "role": "user",
+                                            "content": "あなたは今、セキュリティインシデントの調査で過去のインシデント対応履歴を確認しています。過去の類似のインシデントで記録されたコメントを含む複数の情報 (JSON 形式) を文字列結合しています。\nこの内容に基づき、この過去インシデントについて過検知 もしくは正規検知を判断してください。\n---\n@{variables('Comment')}\n---\n\n回答は以下形式とします。\n{\"falsePositive\" : \"<true もしくは false で回答>\", ”reason”: \"<判断基準を記入>\"}"
+                                        }
+                                    ],
+                                    "temperature": 1,
+                                    "top_p": 1,
+                                    "stream": false,
+                                    "stop": null,
+                                    "max_tokens": 4096,
+                                    "presence_penalty": 0,
+                                    "frequency_penalty": 0,
+                                    "n": 1,
+                                    "seed": 0,
+                                    "logprobs": false,
+                                    "response_format": {
+                                        "type": "text"
+                                    }
+                                },
+                                "path": "/2024-02-15-preview/deployments/@{encodeURIComponent('gpt-4o')}/chat/completions",
+                                "queries": {
+                                    "api-version": "2025-01-01-preview"
+                                }
+                            }
+                        },
+                        "For_each_-_per_AOAI_Output": {
+                            "foreach": "@body('Creates_a_completion_for_the_chat_message')['choices']",
+                            "actions": {
+                                "Parse_JSON_-_AOAI_Output": {
+                                    "type": "ParseJson",
+                                    "inputs": {
+                                        "content": "@item()?['message']?['content']",
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {
+                                                "falsePositive": {
+                                                    "type": "string"
+                                                },
+                                                "reason": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "Condition": {
+                                    "actions": {
+                                        "Update_incident": {
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "put",
+                                                "body": {
+                                                    "incidentArmId": "@triggerBody()?['object']?['id']",
+                                                    "status": "Closed",
+                                                    "classification": {
+                                                        "ClassificationAndReason": "BenignPositive - SuspiciousButExpected",
+                                                        "ClassificationReasonText": "@{body('Parse_JSON_-_AOAI_Output')?['reason']} "
+                                                    }
+                                                },
+                                                "path": "/Incidents"
+                                            }
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Parse_JSON_-_AOAI_Output": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "else": {
+                                        "actions": {}
+                                    },
+                                    "expression": {
+                                        "and": [
+                                            {
+                                                "equals": [
+                                                    "@bool(body('Parse_JSON_-_AOAI_Output')?['falsePositive'])",
+                                                    true
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    "type": "If"
+                                }
+                            },
+                            "runAfter": {
+                                "Creates_a_completion_for_the_chat_message": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach",
+                            "runtimeConfiguration": {
+                                "concurrency": {
+                                    "repetitions": 1
+                                }
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuresentinel": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('azuresentinel'))]",
+                                "connectionName": "[variables('azuresentinel')]",
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId,'/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azuresentinel')]",
+                                "connectionProperties": {
+                                }
+                            },
+                            "azuremonitorlogs": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('azuremonitorlogs'))]",
+                                "connectionName": "[variables('azuremonitorlogs')]",
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId,'/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azuremonitorlogs')]"
+                            },
+                            "azureopenai": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('azureopenai'))]",
+                                "connectionName": "[variables('azureopenai')]",
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azureopenai')]"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

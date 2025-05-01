@@ -1,5 +1,5 @@
 # Send Billing Summary
-この Logic Apps テンプレートを使用して、類似の過去インシデントの対応状況をコメントから確認し、Azure OpenAI で分析、過検知を判断することができます。 
+この Logic Apps テンプレートを使用して、類似の過去インシデントの対応状況をコメントから確認し、Azure OpenAI で分析、過検知を判断することができます。  
 You can use this Logic Apps template to review the response status of similar past incidents from comments, analyze them with Azure OpenAI, and determine falsepositive.
 
 

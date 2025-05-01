@@ -9,4 +9,5 @@ This is a playbook for using Security Copilot to check the reputation of Microso
 After deployment, you need to enable managed identities, grant permissions, and update API connections for Security Copilot and Office 365.
 
 解説のブログはこちらです。  
+The commentary blog is here.
 https://zenn.dev/microsoft/articles/e07147888b1191

@@ -1,0 +1,1400 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "## Defender for Cloud 推奨事項分析ブック\nこのブックでは、Defender for Cloud によって作成されたアクティブなセキュリティ 推奨事項を各観点から集計するブックです。\n"
+      },
+      "name": "intro"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "crossComponentResources": [
+          "{subscriptions}"
+        ],
+        "parameters": [
+          {
+            "id": "89bf65ba-5407-4b0a-b3d6-a973db229ecd",
+            "version": "KqlParameterItem/1.0",
+            "name": "subscriptions",
+            "label": "サブスクリプション",
+            "type": 6,
+            "description": "1 つまたは複数のサブスクリプションを選択してください",
+            "isRequired": true,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "value": [
+              "value::all"
+            ],
+            "typeSettings": {
+              "additionalResourceOptions": [
+                "value::all"
+              ],
+              "includeAll": false,
+              "showDefault": false
+            },
+            "timeContext": {
+              "durationMs": 86400000
+            }
+          },
+          {
+            "id": "9d81f11a-6c64-4748-b477-dfe5e417ec18",
+            "version": "KqlParameterItem/1.0",
+            "name": "riskLevel",
+            "label": "リスク レベル",
+            "type": 2,
+            "description": "推奨事項のリスクレベルを選択してください",
+            "isRequired": true,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "typeSettings": {
+              "additionalResourceOptions": [
+                "value::all"
+              ],
+              "showDefault": false
+            },
+            "jsonData": "[\n { \"value\": \"Critical\", \"label\": \"Critical\"},\n { \"value\": \"High\", \"label\": \"High\"},\n { \"value\": \"Medium\", \"label\": \"Medium\"},\n { \"value\": \"Low\", \"label\": \"Low\"}\n]",
+            "defaultValue": "value::all",
+            "value": [
+              "value::all"
+            ]
+          },
+          {
+            "id": "a34fbec0-b40a-4cf2-9124-430bb6d6bd76",
+            "version": "KqlParameterItem/1.0",
+            "name": "environment",
+            "label": "クラウド環境",
+            "type": 2,
+            "description": "クラウド環境を選択してください",
+            "isRequired": true,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "query": "securityresources\n| where type =~ \"microsoft.security/assessments\" and properties.status.code =~ \"Unhealthy\"\n| project environment = tostring(properties.resourceDetails.Source)\n| where environment in (\"Azure\", \"AWS\", \"GCP\")\n| distinct environment",
+            "crossComponentResources": [
+              "{subscriptions}"
+            ],
+            "typeSettings": {
+              "additionalResourceOptions": [
+                "value::all"
+              ],
+              "showDefault": false
+            },
+            "defaultValue": "value::all",
+            "queryType": 1,
+            "resourceType": "microsoft.resourcegraph/resources"
+          }
+        ],
+        "style": "above",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources"
+      },
+      "name": "parameters - 0"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "securityresources \r\n| where type =~ \"microsoft.security/assessments\"\r\n| extend assessmentType = (tostring(properties.metadata.assessmentType))\r\n| extend assessmentTypeSkimmed = case(\r\n                    tostring(properties.metadata.assessmentType) == \"BuiltIn\", \"BuiltIn\",\r\n                    tostring(properties.metadata.assessmentType) == \"BuiltInPolicy\", \"BuiltIn\",\r\n                    tostring(properties.metadata.assessmentType) == \"CustomPolicy\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"CustomerManaged\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"ManualCustomPolicy\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"ManualBuiltInPolicy\", \"BuiltIn\",\r\n                    dynamic(null)\r\n                    )\r\n| extend assessmentId = tolower(id)\r\n| extend assessmentKey = name\r\n| extend source = tostring(properties.resourceDetails.Source)\r\n| extend resourceId = tostring(properties.resourceDetails.ResourceId)\r\n| extend displayName = tostring(properties.displayName)\r\n| extend statusCode = tostring(properties.status.code)\r\n| extend severity = tostring(properties.metadata.severity)\r\n| extend severityLevel = (\r\n                case( severity =~ \"Critical\", 4,\r\n                  severity =~ \"High\", 3,\r\n                  severity =~ \"Medium\", 2,\r\n                  severity =~ \"Low\", 1,\r\n                  0))\r\n| extend riskLevelText = tostring(properties.risk.level)\r\n| extend riskLevel = (\r\n                case(riskLevelText =~ \"Critical\", 4,\r\n                  riskLevelText =~ \"High\", 3,\r\n                  riskLevelText =~ \"Medium\", 2,\r\n                  riskLevelText =~ \"Low\", 1,\r\n                  0))\r\n| extend riskFactors = iff(isnull(properties.risk.riskFactors), dynamic([]), properties.risk.riskFactors)\r\n| extend statusCause = tostring(properties.status.cause)\r\n| extend isExempt = iff(statusCause == \"Exempt\", tobool(1), tobool(0))\r\n| extend firstEvaluationDate = tostring(todatetime(properties.status.firstEvaluationDate))\r\n| extend statusChangeDate = tostring(todatetime(properties.status.statusChangeDate))\r\n| extend url  = strcat(\"https://\", tostring(properties.links.azurePortal))\r\n| project tenantId, subscriptionId,resourceGroup, resourceId, source, displayName, statusCode, severity, severityLevel, riskLevelText, riskLevel, riskFactors, isExempt, statusCause, firstEvaluationDate, statusChangeDate, assessmentType, assessmentTypeSkimmed, assessmentKey, url\r\n// ブックのパラメータでフィルタ\r\n| extend severityFilter = tostring(\"{riskLevel}\"), environmentFilter = tostring(\"{environment}\")\r\n| where severityFilter has riskLevelText and environmentFilter has source",
+        "size": 0,
+        "title": "Azure Resource Graph Query Base",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{subscriptions}"
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "visible",
+        "comparison": "isNotEqualTo"
+      },
+      "name": "Azure Resource Graph Query Base"
+    },
+    {
+      "type": 11,
+      "content": {
+        "version": "LinkItem/1.0",
+        "style": "tabs",
+        "links": [
+          {
+            "id": "2f53e197-84ba-4415-b6b4-5e29cde3bbcd",
+            "cellValue": "SelectedTab",
+            "linkTarget": "parameter",
+            "linkLabel": "Azure",
+            "subTarget": "AzureTab",
+            "style": "link"
+          },
+          {
+            "id": "44edf49d-6b2c-4ca2-8d78-4de035810ea3",
+            "cellValue": "SelectedTab",
+            "linkTarget": "parameter",
+            "linkLabel": "AWS",
+            "subTarget": "AWSTab",
+            "style": "link"
+          },
+          {
+            "id": "63eb83ed-1295-43c8-990f-0a19960e5736",
+            "cellValue": "SelectedTab",
+            "linkTarget": "parameter",
+            "linkLabel": "GCP",
+            "subTarget": "GCPTab",
+            "style": "link"
+          }
+        ]
+      },
+      "name": "Tabs"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "securityresources \r\n| where type =~ \"microsoft.security/assessments\"\r\n| extend assessmentType = (tostring(properties.metadata.assessmentType))\r\n| extend assessmentTypeSkimmed = case(\r\n                    tostring(properties.metadata.assessmentType) == \"BuiltIn\", \"BuiltIn\",\r\n                    tostring(properties.metadata.assessmentType) == \"BuiltInPolicy\", \"BuiltIn\",\r\n                    tostring(properties.metadata.assessmentType) == \"CustomPolicy\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"CustomerManaged\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"ManualCustomPolicy\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"ManualBuiltInPolicy\", \"BuiltIn\",\r\n                    dynamic(null)\r\n                    )\r\n| extend assessmentId = tolower(id)\r\n| extend assessmentKey = name\r\n| extend source = tostring(properties.resourceDetails.Source)\r\n| extend resourceId = tostring(properties.resourceDetails.ResourceId)\r\n| extend displayName = tostring(properties.displayName)\r\n| extend statusCode = tostring(properties.status.code)\r\n| extend severity = tostring(properties.metadata.severity)\r\n| extend severityLevel = (\r\n                case( severity =~ \"Critical\", 4,\r\n                  severity =~ \"High\", 3,\r\n                  severity =~ \"Medium\", 2,\r\n                  severity =~ \"Low\", 1,\r\n                  0))\r\n| extend riskLevelText = tostring(properties.risk.level)\r\n| extend riskLevel = (\r\n                case(riskLevelText =~ \"Critical\", 4,\r\n                  riskLevelText =~ \"High\", 3,\r\n                  riskLevelText =~ \"Medium\", 2,\r\n                  riskLevelText =~ \"Low\", 1,\r\n                  0))\r\n| extend riskFactors = iff(isnull(properties.risk.riskFactors), dynamic([]), properties.risk.riskFactors)\r\n| extend statusCause = tostring(properties.status.cause)\r\n| extend isExempt = iff(statusCause == \"Exempt\", tobool(1), tobool(0))\r\n| extend firstEvaluationDate = tostring(todatetime(properties.status.firstEvaluationDate))\r\n| extend statusChangeDate = tostring(todatetime(properties.status.statusChangeDate))\r\n| extend url  = strcat(\"https://\", tostring(properties.links.azurePortal))\r\n| project tenantId, subscriptionId,resourceGroup, resourceId, source, displayName, statusCode, severity, severityLevel, riskLevelText, riskLevel, riskFactors, isExempt, statusCause, firstEvaluationDate, statusChangeDate, assessmentType, assessmentTypeSkimmed, assessmentKey, url\r\n// ブックのパラメータでフィルタ\r\n| extend severityFilter = tostring(\"{riskLevel}\"), environmentFilter = tostring(\"{environment}\")\r\n| where severityFilter has riskLevelText and environmentFilter has source\r\n// --- ここまで共通 ---\r\n| where source == \"Azure\"\r\n| where statusCode == \"Unhealthy\"\r\n| summarize Critical = countif(riskLevel == \"4\"),\r\n            High = countif(riskLevel == \"3\"),\r\n            Medium = countif(riskLevel == \"2\"),\r\n            Low = countif(riskLevel == \"1\") ,\r\n            None = countif(riskLevel == \"0\")\r\n  by tenantId, subscriptionId\r\n| project tenantId, subscriptionId, Critical, High, Medium, Low, None\r\n| order by tenantId asc, subscriptionId asc\r\n",
+        "size": 1,
+        "title": "リスク別推奨事項 集計 - Azure",
+        "exportedParameters": [
+          {
+            "fieldName": "tenantId",
+            "parameterName": "tenantIdFilter",
+            "parameterType": 1
+          },
+          {
+            "fieldName": "subscriptionId",
+            "parameterName": "subscriptionIdFilter",
+            "parameterType": 1
+          }
+        ],
+        "showExportToExcel": true,
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "subscriptionId",
+              "formatter": 15,
+              "formatOptions": {
+                "linkTarget": null,
+                "showIcon": true
+              }
+            },
+            {
+              "columnMatch": "Critical",
+              "formatter": 8,
+              "formatOptions": {
+                "min": -5,
+                "max": 30,
+                "palette": "redBright",
+                "customColumnWidthSetting": "14ch"
+              }
+            },
+            {
+              "columnMatch": "High",
+              "formatter": 8,
+              "formatOptions": {
+                "min": -5,
+                "max": 30,
+                "palette": "orange",
+                "customColumnWidthSetting": "14ch"
+              }
+            },
+            {
+              "columnMatch": "Medium",
+              "formatter": 8,
+              "formatOptions": {
+                "min": -5,
+                "max": 30,
+                "palette": "yellow",
+                "customColumnWidthSetting": "14ch"
+              }
+            },
+            {
+              "columnMatch": "Low",
+              "formatter": 8,
+              "formatOptions": {
+                "min": -5,
+                "max": 30,
+                "palette": "green",
+                "customColumnWidthSetting": "14ch"
+              }
+            },
+            {
+              "columnMatch": "None",
+              "formatter": 8,
+              "formatOptions": {
+                "min": -5,
+                "max": 30,
+                "palette": "gray",
+                "customColumnWidthSetting": "14ch"
+              }
+            }
+          ]
+        },
+        "sortBy": []
+      },
+      "conditionalVisibility": {
+        "parameterName": "SelectedTab",
+        "comparison": "isEqualTo",
+        "value": "AzureTab"
+      },
+      "name": "リスク別推奨事項 集計 - Azure",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "securityresources \r\n| where type =~ \"microsoft.security/assessments\"\r\n| extend assessmentType = (tostring(properties.metadata.assessmentType))\r\n| extend assessmentTypeSkimmed = case(\r\n                    tostring(properties.metadata.assessmentType) == \"BuiltIn\", \"BuiltIn\",\r\n                    tostring(properties.metadata.assessmentType) == \"BuiltInPolicy\", \"BuiltIn\",\r\n                    tostring(properties.metadata.assessmentType) == \"CustomPolicy\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"CustomerManaged\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"ManualCustomPolicy\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"ManualBuiltInPolicy\", \"BuiltIn\",\r\n                    dynamic(null)\r\n                    )\r\n| extend assessmentId = tolower(id)\r\n| extend assessmentKey = name\r\n| extend source = tostring(properties.resourceDetails.Source)\r\n| extend resourceId = tostring(properties.resourceDetails.ResourceId)\r\n| extend displayName = tostring(properties.displayName)\r\n| extend statusCode = tostring(properties.status.code)\r\n| extend severity = tostring(properties.metadata.severity)\r\n| extend severityLevel = (\r\n                case( severity =~ \"Critical\", 4,\r\n                  severity =~ \"High\", 3,\r\n                  severity =~ \"Medium\", 2,\r\n                  severity =~ \"Low\", 1,\r\n                  0))\r\n| extend riskLevelText = tostring(properties.risk.level)\r\n| extend riskLevel = (\r\n                case(riskLevelText =~ \"Critical\", 4,\r\n                  riskLevelText =~ \"High\", 3,\r\n                  riskLevelText =~ \"Medium\", 2,\r\n                  riskLevelText =~ \"Low\", 1,\r\n                  0))\r\n| extend riskFactors = iff(isnull(properties.risk.riskFactors), dynamic([]), properties.risk.riskFactors)\r\n| extend statusCause = tostring(properties.status.cause)\r\n| extend isExempt = iff(statusCause == \"Exempt\", tobool(1), tobool(0))\r\n| extend firstEvaluationDate = tostring(todatetime(properties.status.firstEvaluationDate))\r\n| extend statusChangeDate = tostring(todatetime(properties.status.statusChangeDate))\r\n| extend url  = strcat(\"https://\", tostring(properties.links.azurePortal))\r\n| project tenantId, subscriptionId,resourceGroup, resourceId, source, displayName, statusCode, severity, severityLevel, riskLevelText, riskLevel, riskFactors, isExempt, statusCause, firstEvaluationDate, statusChangeDate, assessmentType, assessmentTypeSkimmed, assessmentKey, url\r\n// ブックのパラメータでフィルタ\r\n| extend severityFilter = tostring(\"{riskLevel}\"), environmentFilter = tostring(\"{environment}\")\r\n| where severityFilter has riskLevelText and environmentFilter has source\r\n// --- ここまで共通 ---\r\n| where source == \"AWS\"\r\n| where statusCode == \"Unhealthy\"\r\n| summarize Critical = countif(riskLevel == \"4\"),\r\n            High = countif(riskLevel == \"3\"),\r\n            Medium = countif(riskLevel == \"2\"),\r\n            Low = countif(riskLevel == \"1\"),\r\n            None = countif(riskLevel == \"0\")\r\n  by subscriptionId, resourceGroup\r\n| project subscriptionId, resourceGroup, Critical, High, Medium, Low, None\r\n| order by subscriptionId asc, resourceGroup asc\r\n",
+        "size": 1,
+        "title": "リスク別推奨事項 集計 - AWS",
+        "exportedParameters": [
+          {
+            "fieldName": "subscriptionId",
+            "parameterName": "subscriptionIdFilter",
+            "parameterType": 1
+          },
+          {
+            "fieldName": "resourceGroup",
+            "parameterName": "resourceGroupFilter",
+            "parameterType": 1
+          }
+        ],
+        "showExportToExcel": true,
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "subscriptionId",
+              "formatter": 15,
+              "formatOptions": {
+                "linkTarget": null,
+                "showIcon": true
+              }
+            },
+            {
+              "columnMatch": "Critical",
+              "formatter": 8,
+              "formatOptions": {
+                "min": -5,
+                "max": 30,
+                "palette": "redBright",
+                "customColumnWidthSetting": "14ch"
+              }
+            },
+            {
+              "columnMatch": "High",
+              "formatter": 8,
+              "formatOptions": {
+                "min": -5,
+                "max": 30,
+                "palette": "orange",
+                "customColumnWidthSetting": "14ch"
+              }
+            },
+            {
+              "columnMatch": "Medium",
+              "formatter": 8,
+              "formatOptions": {
+                "min": -5,
+                "max": 30,
+                "palette": "yellow",
+                "customColumnWidthSetting": "14ch"
+              }
+            },
+            {
+              "columnMatch": "Low",
+              "formatter": 8,
+              "formatOptions": {
+                "min": -5,
+                "max": 30,
+                "palette": "green",
+                "customColumnWidthSetting": "14ch"
+              }
+            },
+            {
+              "columnMatch": "None",
+              "formatter": 8,
+              "formatOptions": {
+                "min": -5,
+                "max": 30,
+                "palette": "gray",
+                "customColumnWidthSetting": "14ch"
+              }
+            }
+          ]
+        },
+        "sortBy": []
+      },
+      "conditionalVisibility": {
+        "parameterName": "SelectedTab",
+        "comparison": "isEqualTo",
+        "value": "AWSTab"
+      },
+      "name": "リスク別推奨事項 集計 - AWS",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "securityresources \r\n| where type =~ \"microsoft.security/assessments\"\r\n| extend assessmentType = (tostring(properties.metadata.assessmentType))\r\n| extend assessmentTypeSkimmed = case(\r\n                    tostring(properties.metadata.assessmentType) == \"BuiltIn\", \"BuiltIn\",\r\n                    tostring(properties.metadata.assessmentType) == \"BuiltInPolicy\", \"BuiltIn\",\r\n                    tostring(properties.metadata.assessmentType) == \"CustomPolicy\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"CustomerManaged\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"ManualCustomPolicy\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"ManualBuiltInPolicy\", \"BuiltIn\",\r\n                    dynamic(null)\r\n                    )\r\n| extend assessmentId = tolower(id)\r\n| extend assessmentKey = name\r\n| extend source = tostring(properties.resourceDetails.Source)\r\n| extend resourceId = tostring(properties.resourceDetails.ResourceId)\r\n| extend displayName = tostring(properties.displayName)\r\n| extend statusCode = tostring(properties.status.code)\r\n| extend severity = tostring(properties.metadata.severity)\r\n| extend severityLevel = (\r\n                case( severity =~ \"Critical\", 4,\r\n                  severity =~ \"High\", 3,\r\n                  severity =~ \"Medium\", 2,\r\n                  severity =~ \"Low\", 1,\r\n                  0))\r\n| extend riskLevelText = tostring(properties.risk.level)\r\n| extend riskLevel = (\r\n                case(riskLevelText =~ \"Critical\", 4,\r\n                  riskLevelText =~ \"High\", 3,\r\n                  riskLevelText =~ \"Medium\", 2,\r\n                  riskLevelText =~ \"Low\", 1,\r\n                  0))\r\n| extend riskFactors = iff(isnull(properties.risk.riskFactors), dynamic([]), properties.risk.riskFactors)\r\n| extend statusCause = tostring(properties.status.cause)\r\n| extend isExempt = iff(statusCause == \"Exempt\", tobool(1), tobool(0))\r\n| extend firstEvaluationDate = tostring(todatetime(properties.status.firstEvaluationDate))\r\n| extend statusChangeDate = tostring(todatetime(properties.status.statusChangeDate))\r\n| extend url  = strcat(\"https://\", tostring(properties.links.azurePortal))\r\n| project tenantId, subscriptionId,resourceGroup, resourceId, source, displayName, statusCode, severity, severityLevel, riskLevelText, riskLevel, riskFactors, isExempt, statusCause, firstEvaluationDate, statusChangeDate, assessmentType, assessmentTypeSkimmed, assessmentKey, url\r\n// ブックのパラメータでフィルタ\r\n| extend severityFilter = tostring(\"{riskLevel}\"), environmentFilter = tostring(\"{environment}\")\r\n| where severityFilter has riskLevelText and environmentFilter has source\r\n// --- ここまで共通 ---\r\n| where source == \"GCP\"\r\n| where statusCode == \"Unhealthy\"\r\n| summarize Critical = countif(riskLevel == \"4\"),\r\n            High = countif(riskLevel == \"3\"),\r\n            Medium = countif(riskLevel == \"2\"),\r\n            Low = countif(riskLevel == \"1\"),\r\n            None = countif(riskLevel == \"0\")\r\n  by subscriptionId, resourceGroup\r\n| project subscriptionId, resourceGroup, Critical, High, Medium, Low, None\r\n| order by subscriptionId asc, resourceGroup asc\r\n",
+        "size": 1,
+        "title": "リスク別推奨事項 集計 - GCP",
+        "exportedParameters": [
+          {
+            "fieldName": "subscriptionId",
+            "parameterName": "subscriptionIdFilter",
+            "parameterType": 1
+          },
+          {
+            "fieldName": "resourceGroup",
+            "parameterName": "resourceGroupFilter",
+            "parameterType": 1
+          }
+        ],
+        "showExportToExcel": true,
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "subscriptionId",
+              "formatter": 15,
+              "formatOptions": {
+                "linkTarget": null,
+                "showIcon": true
+              }
+            },
+            {
+              "columnMatch": "Critical",
+              "formatter": 8,
+              "formatOptions": {
+                "min": -5,
+                "max": 30,
+                "palette": "redBright",
+                "customColumnWidthSetting": "14ch"
+              }
+            },
+            {
+              "columnMatch": "High",
+              "formatter": 8,
+              "formatOptions": {
+                "min": -5,
+                "max": 30,
+                "palette": "orange",
+                "customColumnWidthSetting": "14ch"
+              }
+            },
+            {
+              "columnMatch": "Medium",
+              "formatter": 8,
+              "formatOptions": {
+                "min": -5,
+                "max": 30,
+                "palette": "yellow",
+                "customColumnWidthSetting": "14ch"
+              }
+            },
+            {
+              "columnMatch": "Low",
+              "formatter": 8,
+              "formatOptions": {
+                "min": -5,
+                "max": 30,
+                "palette": "green",
+                "customColumnWidthSetting": "14ch"
+              }
+            },
+            {
+              "columnMatch": "None",
+              "formatter": 8,
+              "formatOptions": {
+                "min": -5,
+                "max": 30,
+                "palette": "gray",
+                "customColumnWidthSetting": "14ch"
+              }
+            }
+          ],
+          "sortBy": [
+            {
+              "itemKey": "resourceGroup",
+              "sortOrder": 1
+            }
+          ]
+        },
+        "sortBy": [
+          {
+            "itemKey": "resourceGroup",
+            "sortOrder": 1
+          }
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "SelectedTab",
+        "comparison": "isEqualTo",
+        "value": "GCPTab"
+      },
+      "name": "リスク別推奨事項 集計 - GCP",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "securityresources \r\n| where type =~ \"microsoft.security/assessments\"\r\n| extend assessmentType = (tostring(properties.metadata.assessmentType))\r\n| extend assessmentTypeSkimmed = case(\r\n                    tostring(properties.metadata.assessmentType) == \"BuiltIn\", \"BuiltIn\",\r\n                    tostring(properties.metadata.assessmentType) == \"BuiltInPolicy\", \"BuiltIn\",\r\n                    tostring(properties.metadata.assessmentType) == \"CustomPolicy\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"CustomerManaged\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"ManualCustomPolicy\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"ManualBuiltInPolicy\", \"BuiltIn\",\r\n                    dynamic(null)\r\n                    )\r\n| extend assessmentId = tolower(id)\r\n| extend assessmentKey = name\r\n| extend source = tostring(properties.resourceDetails.Source)\r\n| extend resourceId = tostring(properties.resourceDetails.ResourceId)\r\n| extend displayName = tostring(properties.displayName)\r\n| extend statusCode = tostring(properties.status.code)\r\n| extend severity = tostring(properties.metadata.severity)\r\n| extend severityLevel = (\r\n                case( severity =~ \"Critical\", 4,\r\n                  severity =~ \"High\", 3,\r\n                  severity =~ \"Medium\", 2,\r\n                  severity =~ \"Low\", 1,\r\n                  0))\r\n| extend riskLevelText = tostring(properties.risk.level)\r\n| extend riskLevel = (\r\n                case(riskLevelText =~ \"Critical\", 4,\r\n                  riskLevelText =~ \"High\", 3,\r\n                  riskLevelText =~ \"Medium\", 2,\r\n                  riskLevelText =~ \"Low\", 1,\r\n                  0))\r\n| extend riskFactors = iff(isnull(properties.risk.riskFactors), dynamic([]), properties.risk.riskFactors)\r\n| extend statusCause = tostring(properties.status.cause)\r\n| extend isExempt = iff(statusCause == \"Exempt\", tobool(1), tobool(0))\r\n| extend firstEvaluationDate = tostring(todatetime(properties.status.firstEvaluationDate))\r\n| extend statusChangeDate = tostring(todatetime(properties.status.statusChangeDate))\r\n| extend url  = strcat(\"https://\", tostring(properties.links.azurePortal))\r\n| project tenantId, subscriptionId,resourceGroup, resourceId, source, displayName, statusCode, severity, severityLevel, riskLevelText, riskLevel, riskFactors, isExempt, statusCause, firstEvaluationDate, statusChangeDate, assessmentType, assessmentTypeSkimmed, assessmentKey, url\r\n// ブックのパラメータでフィルタ\r\n| extend severityFilter = tostring(\"{riskLevel}\"), environmentFilter = tostring(\"{environment}\")\r\n| where severityFilter has riskLevelText and environmentFilter has source\r\n// --- ここまで共通 ---\r\n| where source == \"Azure\"\r\n| where statusCode == \"Unhealthy\"\r\n// 前段の選択内容でフィルタ\r\n| where tenantId == tostring(\"{tenantIdFilter}\") and subscriptionId == tostring(\"{subscriptionIdFilter}\")\r\n| extend url  = strcat(\"https://portal.azure.com/#view/Microsoft_Azure_Security/GenericRecommendationDetailsBlade/assessmentKey/\", assessmentKey, \"/subscriptionIds~/%5B%22\", subscriptionId, \"%22%5D\")\r\n| summarize resourceCount = count() by tenantId, subscriptionId, resourceGroup, displayName, severity, severityLevel, riskLevel, riskLevelText, url\r\n| project tenantId, subscriptionId, resourceGroup, displayName, severity, severityLevel, riskLevel, riskLevelText, resourceCount, url\r\n| order by tenantId asc, subscriptionId asc,  severityLevel desc, riskLevel desc, resourceCount desc\r\n\r\n",
+        "size": 0,
+        "title": "推奨事項別リソース数 集計 - Azure",
+        "exportedParameters": [
+          {
+            "fieldName": "displayName",
+            "parameterName": "displayNameFilter",
+            "parameterType": 1
+          },
+          {
+            "fieldName": "riskLevel",
+            "parameterName": "riskLevelFilter",
+            "parameterType": 1
+          }
+        ],
+        "showExportToExcel": true,
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "subscriptionId",
+              "formatter": 15,
+              "formatOptions": {
+                "linkTarget": null,
+                "showIcon": true
+              }
+            },
+            {
+              "columnMatch": "severity",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "High",
+                    "representation": "Sev1",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Medium",
+                    "representation": "Sev2",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Low",
+                    "representation": "Sev3",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Critical",
+                    "representation": "Sev0",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "Unavailable",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "severityLevel",
+              "formatter": 5
+            },
+            {
+              "columnMatch": "riskLevel",
+              "formatter": 5
+            },
+            {
+              "columnMatch": "riskLevelText",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Critical",
+                    "representation": "4",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "High",
+                    "representation": "3",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Medium",
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Low",
+                    "representation": "1",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "unknown",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "resourceCount",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "greenRed"
+              }
+            },
+            {
+              "columnMatch": "url",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Url"
+              }
+            }
+          ],
+          "rowLimit": 10000,
+          "filter": true,
+          "labelSettings": [
+            {
+              "columnId": "riskLevelText",
+              "label": "riskLevel"
+            }
+          ]
+        },
+        "sortBy": []
+      },
+      "conditionalVisibility": {
+        "parameterName": "SelectedTab",
+        "comparison": "isEqualTo",
+        "value": "AzureTab"
+      },
+      "name": "推奨事項別リソース数 集計 - Azure",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "securityresources \r\n| where type =~ \"microsoft.security/assessments\"\r\n| extend assessmentType = (tostring(properties.metadata.assessmentType))\r\n| extend assessmentTypeSkimmed = case(\r\n                    tostring(properties.metadata.assessmentType) == \"BuiltIn\", \"BuiltIn\",\r\n                    tostring(properties.metadata.assessmentType) == \"BuiltInPolicy\", \"BuiltIn\",\r\n                    tostring(properties.metadata.assessmentType) == \"CustomPolicy\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"CustomerManaged\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"ManualCustomPolicy\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"ManualBuiltInPolicy\", \"BuiltIn\",\r\n                    dynamic(null)\r\n                    )\r\n| extend assessmentId = tolower(id)\r\n| extend assessmentKey = name\r\n| extend source = tostring(properties.resourceDetails.Source)\r\n| extend resourceId = tostring(properties.resourceDetails.ResourceId)\r\n| extend displayName = tostring(properties.displayName)\r\n| extend statusCode = tostring(properties.status.code)\r\n| extend severity = tostring(properties.metadata.severity)\r\n| extend severityLevel = (\r\n                case( severity =~ \"Critical\", 4,\r\n                  severity =~ \"High\", 3,\r\n                  severity =~ \"Medium\", 2,\r\n                  severity =~ \"Low\", 1,\r\n                  0))\r\n| extend riskLevelText = tostring(properties.risk.level)\r\n| extend riskLevel = (\r\n                case(riskLevelText =~ \"Critical\", 4,\r\n                  riskLevelText =~ \"High\", 3,\r\n                  riskLevelText =~ \"Medium\", 2,\r\n                  riskLevelText =~ \"Low\", 1,\r\n                  0))\r\n| extend riskFactors = iff(isnull(properties.risk.riskFactors), dynamic([]), properties.risk.riskFactors)\r\n| extend statusCause = tostring(properties.status.cause)\r\n| extend isExempt = iff(statusCause == \"Exempt\", tobool(1), tobool(0))\r\n| extend firstEvaluationDate = tostring(todatetime(properties.status.firstEvaluationDate))\r\n| extend statusChangeDate = tostring(todatetime(properties.status.statusChangeDate))\r\n| extend url  = strcat(\"https://\", tostring(properties.links.azurePortal))\r\n| project tenantId, subscriptionId,resourceGroup, resourceId, source, displayName, statusCode, severity, severityLevel, riskLevelText, riskLevel, riskFactors, isExempt, statusCause, firstEvaluationDate, statusChangeDate, assessmentType, assessmentTypeSkimmed, assessmentKey, url\r\n// ブックのパラメータでフィルタ\r\n| extend severityFilter = tostring(\"{riskLevel}\"), environmentFilter = tostring(\"{environment}\")\r\n| where severityFilter has riskLevelText and environmentFilter has source\r\n// --- ここまで共通 ---\r\n| where source == \"AWS\"\r\n| where statusCode == \"Unhealthy\"\r\n// 前段の選択内容でフィルタ\r\n| where subscriptionId == tostring(\"{subscriptionIdFilter}\") and resourceGroup == tostring(\"{resourceGroupFilter}\") \r\n| extend url  = strcat(\"https://portal.azure.com/#view/Microsoft_Azure_Security/GenericRecommendationDetailsBlade/assessmentKey/\", assessmentKey, \"/subscriptionIds~/%5B%22\", subscriptionId, \"%22%5D\")\r\n| summarize resourceCount = count() by subscriptionId, resourceGroup, displayName, severity, severityLevel, riskLevel, riskLevelText, url\r\n| project subscriptionId, resourceGroup, displayName, severity, severityLevel, riskLevel, riskLevelText, resourceCount, url\r\n| order by subscriptionId asc,  severityLevel desc, riskLevel desc, resourceCount desc\r\n\r\n\r\n",
+        "size": 0,
+        "title": "推奨事項別リソース数 集計 - AWS",
+        "exportedParameters": [
+          {
+            "fieldName": "displayName",
+            "parameterName": "displayNameFilter"
+          },
+          {
+            "fieldName": "riskLevel",
+            "parameterName": "riskLevelFilter",
+            "parameterType": 1
+          }
+        ],
+        "showExportToExcel": true,
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "subscriptionId",
+              "formatter": 15,
+              "formatOptions": {
+                "linkTarget": null,
+                "showIcon": true
+              }
+            },
+            {
+              "columnMatch": "severity",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "High",
+                    "representation": "Sev1",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Medium",
+                    "representation": "Sev2",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Low",
+                    "representation": "Sev3",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Critical",
+                    "representation": "Sev0",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "unknown",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "severityLevel",
+              "formatter": 5
+            },
+            {
+              "columnMatch": "riskLevel",
+              "formatter": 5
+            },
+            {
+              "columnMatch": "riskLevelText",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Critical",
+                    "representation": "4",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "High",
+                    "representation": "3",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Medium",
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Low",
+                    "representation": "1",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "unknown",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "resourceCount",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "greenRed"
+              }
+            },
+            {
+              "columnMatch": "url",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Url"
+              }
+            }
+          ],
+          "rowLimit": 10000,
+          "filter": true,
+          "labelSettings": [
+            {
+              "columnId": "riskLevelText",
+              "label": "riskLevel"
+            }
+          ]
+        },
+        "sortBy": []
+      },
+      "conditionalVisibility": {
+        "parameterName": "SelectedTab",
+        "comparison": "isEqualTo",
+        "value": "AWSTab"
+      },
+      "name": "推奨事項別リソース数 集計 - AWS",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "securityresources \r\n| where type =~ \"microsoft.security/assessments\"\r\n| extend assessmentType = (tostring(properties.metadata.assessmentType))\r\n| extend assessmentTypeSkimmed = case(\r\n                    tostring(properties.metadata.assessmentType) == \"BuiltIn\", \"BuiltIn\",\r\n                    tostring(properties.metadata.assessmentType) == \"BuiltInPolicy\", \"BuiltIn\",\r\n                    tostring(properties.metadata.assessmentType) == \"CustomPolicy\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"CustomerManaged\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"ManualCustomPolicy\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"ManualBuiltInPolicy\", \"BuiltIn\",\r\n                    dynamic(null)\r\n                    )\r\n| extend assessmentId = tolower(id)\r\n| extend assessmentKey = name\r\n| extend source = tostring(properties.resourceDetails.Source)\r\n| extend resourceId = tostring(properties.resourceDetails.ResourceId)\r\n| extend displayName = tostring(properties.displayName)\r\n| extend statusCode = tostring(properties.status.code)\r\n| extend severity = tostring(properties.metadata.severity)\r\n| extend severityLevel = (\r\n                case( severity =~ \"Critical\", 4,\r\n                  severity =~ \"High\", 3,\r\n                  severity =~ \"Medium\", 2,\r\n                  severity =~ \"Low\", 1,\r\n                  0))\r\n| extend riskLevelText = tostring(properties.risk.level)\r\n| extend riskLevel = (\r\n                case(riskLevelText =~ \"Critical\", 4,\r\n                  riskLevelText =~ \"High\", 3,\r\n                  riskLevelText =~ \"Medium\", 2,\r\n                  riskLevelText =~ \"Low\", 1,\r\n                  0))\r\n| extend riskFactors = iff(isnull(properties.risk.riskFactors), dynamic([]), properties.risk.riskFactors)\r\n| extend statusCause = tostring(properties.status.cause)\r\n| extend isExempt = iff(statusCause == \"Exempt\", tobool(1), tobool(0))\r\n| extend firstEvaluationDate = tostring(todatetime(properties.status.firstEvaluationDate))\r\n| extend statusChangeDate = tostring(todatetime(properties.status.statusChangeDate))\r\n| extend url  = strcat(\"https://\", tostring(properties.links.azurePortal))\r\n| project tenantId, subscriptionId,resourceGroup, resourceId, source, displayName, statusCode, severity, severityLevel, riskLevelText, riskLevel, riskFactors, isExempt, statusCause, firstEvaluationDate, statusChangeDate, assessmentType, assessmentTypeSkimmed, assessmentKey, url\r\n// ブックのパラメータでフィルタ\r\n| extend severityFilter = tostring(\"{riskLevel}\"), environmentFilter = tostring(\"{environment}\")\r\n| where severityFilter has riskLevelText and environmentFilter has source\r\n// --- ここまで共通 ---\r\n| where source == \"GCP\"\r\n| where statusCode == \"Unhealthy\"\r\n// 前段の選択内容でフィルタ\r\n| where subscriptionId == tostring(\"{subscriptionIdFilter}\") and resourceGroup == tostring(\"{resourceGroupFilter}\") \r\n| extend url  = strcat(\"https://portal.azure.com/#view/Microsoft_Azure_Security/GenericRecommendationDetailsBlade/assessmentKey/\", assessmentKey, \"/subscriptionIds~/%5B%22\", subscriptionId, \"%22%5D\")\r\n| summarize resourceCount = count() by subscriptionId, resourceGroup, displayName, severity, severityLevel, riskLevel, riskLevelText, url\r\n| project subscriptionId, resourceGroup, displayName, severity, severityLevel, riskLevel, riskLevelText, resourceCount, url\r\n| order by subscriptionId asc,  severityLevel desc, riskLevel desc, resourceCount desc\r\n\r\n",
+        "size": 0,
+        "title": "推奨事項別リソース数 集計 - GCP",
+        "exportedParameters": [
+          {
+            "fieldName": "displayName",
+            "parameterName": "displayNameFilter"
+          },
+          {
+            "fieldName": "riskLevel",
+            "parameterName": "riskLevelFilter",
+            "parameterType": 1
+          }
+        ],
+        "showExportToExcel": true,
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "subscriptionId",
+              "formatter": 15,
+              "formatOptions": {
+                "linkTarget": null,
+                "showIcon": true
+              }
+            },
+            {
+              "columnMatch": "severity",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "High",
+                    "representation": "Sev1",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Medium",
+                    "representation": "Sev2",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Low",
+                    "representation": "Sev3",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Critical",
+                    "representation": "Sev0",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "unknown",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "severityLevel",
+              "formatter": 5
+            },
+            {
+              "columnMatch": "riskLevel",
+              "formatter": 5
+            },
+            {
+              "columnMatch": "riskLevelText",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Critical",
+                    "representation": "4",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "High",
+                    "representation": "3",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Medium",
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Low",
+                    "representation": "1",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "unknown",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "resourceCount",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "greenRed"
+              }
+            },
+            {
+              "columnMatch": "url",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Url"
+              }
+            }
+          ],
+          "rowLimit": 10000,
+          "filter": true,
+          "labelSettings": [
+            {
+              "columnId": "riskLevelText",
+              "label": "riskLevel"
+            }
+          ]
+        },
+        "sortBy": []
+      },
+      "conditionalVisibility": {
+        "parameterName": "SelectedTab",
+        "comparison": "isEqualTo",
+        "value": "GCPTab"
+      },
+      "name": "推奨事項別リソース数 集計 - GCP",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "securityresources \r\n| where type =~ \"microsoft.security/assessments\"\r\n| extend assessmentType = (tostring(properties.metadata.assessmentType))\r\n| extend assessmentTypeSkimmed = case(\r\n                    tostring(properties.metadata.assessmentType) == \"BuiltIn\", \"BuiltIn\",\r\n                    tostring(properties.metadata.assessmentType) == \"BuiltInPolicy\", \"BuiltIn\",\r\n                    tostring(properties.metadata.assessmentType) == \"CustomPolicy\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"CustomerManaged\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"ManualCustomPolicy\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"ManualBuiltInPolicy\", \"BuiltIn\",\r\n                    dynamic(null)\r\n                    )\r\n| extend assessmentId = tolower(id)\r\n| extend assessmentKey = name\r\n| extend source = tostring(properties.resourceDetails.Source)\r\n| extend resourceId = tostring(properties.resourceDetails.ResourceId)\r\n| extend displayName = tostring(properties.displayName)\r\n| extend statusCode = tostring(properties.status.code)\r\n| extend severity = tostring(properties.metadata.severity)\r\n| extend severityLevel = (\r\n                case( severity =~ \"Critical\", 4,\r\n                  severity =~ \"High\", 3,\r\n                  severity =~ \"Medium\", 2,\r\n                  severity =~ \"Low\", 1,\r\n                  0))\r\n| extend riskLevelText = tostring(properties.risk.level)\r\n| extend riskLevel = (\r\n                case(riskLevelText =~ \"Critical\", 4,\r\n                  riskLevelText =~ \"High\", 3,\r\n                  riskLevelText =~ \"Medium\", 2,\r\n                  riskLevelText =~ \"Low\", 1,\r\n                  0))\r\n| extend riskFactors = iff(isnull(properties.risk.riskFactors), dynamic([]), properties.risk.riskFactors)\r\n| extend statusCause = tostring(properties.status.cause)\r\n| extend isExempt = iff(statusCause == \"Exempt\", tobool(1), tobool(0))\r\n| extend firstEvaluationDate = tostring(todatetime(properties.status.firstEvaluationDate))\r\n| extend statusChangeDate = tostring(todatetime(properties.status.statusChangeDate))\r\n| extend url  = strcat(\"https://\", tostring(properties.links.azurePortal))\r\n| project tenantId, subscriptionId,resourceGroup, resourceId, source, displayName, statusCode, severity, severityLevel, riskLevelText, riskLevel, riskFactors, isExempt, statusCause, firstEvaluationDate, statusChangeDate, assessmentType, assessmentTypeSkimmed, assessmentKey, url\r\n// ブックのパラメータでフィルタ\r\n| extend severityFilter = tostring(\"{riskLevel}\"), environmentFilter = tostring(\"{environment}\")\r\n| where severityFilter has riskLevelText and environmentFilter has source\r\n// --- ここまで共通 ---\r\n| where source == \"Azure\"\r\n| where statusCode == \"Unhealthy\"\r\n// 前段の選択内容でフィルタ\r\n| where tenantId == tostring(\"{tenantIdFilter}\") and subscriptionId == tostring(\"{subscriptionIdFilter}\") and displayName == tostring(\"{displayNameFilter}\") and riskLevel== tostring(\"{riskLevelFilter}\") \r\n| extend elapsedDays = round((now() - todatetime(statusChangeDate)) / 1d, 0)\r\n| project subscriptionId,resourceGroup, resourceId, displayName, severity, riskLevelText, riskLevel, riskFactors, elapsedDays, url\r\n| order by riskLevel desc\r\n\r\n\r\n\r\n",
+        "size": 0,
+        "title": "リスク別推奨事項詳細 - Azure",
+        "showExportToExcel": true,
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "subscriptionId",
+              "formatter": 15,
+              "formatOptions": {
+                "linkTarget": null,
+                "showIcon": true
+              }
+            },
+            {
+              "columnMatch": "resourceId",
+              "formatter": 13,
+              "formatOptions": {
+                "linkTarget": null,
+                "showIcon": true
+              }
+            },
+            {
+              "columnMatch": "severity",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "High",
+                    "representation": "Sev1",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Medium",
+                    "representation": "Sev2",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Low",
+                    "representation": "Sev3",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Critical",
+                    "representation": "Sev0",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "unknown",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "riskLevelText",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Critical",
+                    "representation": "4",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "High",
+                    "representation": "3",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Medium",
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Low",
+                    "representation": "1",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "unknown",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "riskLevel",
+              "formatter": 5
+            },
+            {
+              "columnMatch": "elapsedDays",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "max": 90,
+                "palette": "redBright"
+              }
+            },
+            {
+              "columnMatch": "url",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Url",
+                "linkLabel": ""
+              },
+              "tooltipFormat": {
+                "tooltip": "to Azure Portal"
+              }
+            }
+          ],
+          "rowLimit": 10000,
+          "filter": true,
+          "labelSettings": [
+            {
+              "columnId": "riskLevelText",
+              "label": "riskLevel"
+            }
+          ]
+        },
+        "sortBy": []
+      },
+      "conditionalVisibility": {
+        "parameterName": "SelectedTab",
+        "comparison": "isEqualTo",
+        "value": "AzureTab"
+      },
+      "name": "リスク別推奨事項詳細 - Azure",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "securityresources \r\n| where type =~ \"microsoft.security/assessments\"\r\n| extend assessmentType = (tostring(properties.metadata.assessmentType))\r\n| extend assessmentTypeSkimmed = case(\r\n                    tostring(properties.metadata.assessmentType) == \"BuiltIn\", \"BuiltIn\",\r\n                    tostring(properties.metadata.assessmentType) == \"BuiltInPolicy\", \"BuiltIn\",\r\n                    tostring(properties.metadata.assessmentType) == \"CustomPolicy\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"CustomerManaged\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"ManualCustomPolicy\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"ManualBuiltInPolicy\", \"BuiltIn\",\r\n                    dynamic(null)\r\n                    )\r\n| extend assessmentId = tolower(id)\r\n| extend assessmentKey = name\r\n| extend source = tostring(properties.resourceDetails.Source)\r\n| extend resourceId = tostring(properties.resourceDetails.ResourceId)\r\n| extend displayName = tostring(properties.displayName)\r\n| extend statusCode = tostring(properties.status.code)\r\n| extend severity = tostring(properties.metadata.severity)\r\n| extend severityLevel = (\r\n                case( severity =~ \"Critical\", 4,\r\n                  severity =~ \"High\", 3,\r\n                  severity =~ \"Medium\", 2,\r\n                  severity =~ \"Low\", 1,\r\n                  0))\r\n| extend riskLevelText = tostring(properties.risk.level)\r\n| extend riskLevel = (\r\n                case(riskLevelText =~ \"Critical\", 4,\r\n                  riskLevelText =~ \"High\", 3,\r\n                  riskLevelText =~ \"Medium\", 2,\r\n                  riskLevelText =~ \"Low\", 1,\r\n                  0))\r\n| extend riskFactors = iff(isnull(properties.risk.riskFactors), dynamic([]), properties.risk.riskFactors)\r\n| extend statusCause = tostring(properties.status.cause)\r\n| extend isExempt = iff(statusCause == \"Exempt\", tobool(1), tobool(0))\r\n| extend firstEvaluationDate = tostring(todatetime(properties.status.firstEvaluationDate))\r\n| extend statusChangeDate = tostring(todatetime(properties.status.statusChangeDate))\r\n| extend url  = strcat(\"https://\", tostring(properties.links.azurePortal))\r\n| project tenantId, subscriptionId,resourceGroup, resourceId, source, displayName, statusCode, severity, severityLevel, riskLevelText, riskLevel, riskFactors, isExempt, statusCause, firstEvaluationDate, statusChangeDate, assessmentType, assessmentTypeSkimmed, assessmentKey, url\r\n// ブックのパラメータでフィルタ\r\n| extend severityFilter = tostring(\"{riskLevel}\"), environmentFilter = tostring(\"{environment}\")\r\n| where severityFilter has riskLevelText and environmentFilter has source\r\n// --- ここまで共通 ---\r\n| where source == \"AWS\"\r\n| where statusCode == \"Unhealthy\"\r\n// 前段の選択内容でフィルタ\r\n| where subscriptionId == tostring(\"{subscriptionIdFilter}\") and resourceGroup == tostring(\"{resourceGroupFilter}\") and displayName == tostring(\"{displayNameFilter}\") and riskLevel== tostring(\"{riskLevelFilter}\") \r\n| extend elapsedDays = round((now() - todatetime(statusChangeDate)) / 1d, 0)\r\n| project resourceGroup, resourceId, displayName, severity, riskLevelText, riskLevel, riskFactors, elapsedDays, url\r\n| order by riskLevel desc\r\n\r\n\r\n\r\n",
+        "size": 0,
+        "title": "リスク別推奨事項詳細 - AWS",
+        "showExportToExcel": true,
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "resourceId",
+              "formatter": 13,
+              "formatOptions": {
+                "linkTarget": null,
+                "showIcon": true
+              }
+            },
+            {
+              "columnMatch": "severity",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "High",
+                    "representation": "Sev1",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Medium",
+                    "representation": "Sev2",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Low",
+                    "representation": "Sev3",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Critical",
+                    "representation": "Sev0",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "unknown",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "riskLevelText",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Critical",
+                    "representation": "4",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "High",
+                    "representation": "3",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Medium",
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Low",
+                    "representation": "1",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "unknown",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "riskLevel",
+              "formatter": 5
+            },
+            {
+              "columnMatch": "elapsedDays",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "max": 90,
+                "palette": "redBright"
+              }
+            },
+            {
+              "columnMatch": "url",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Url",
+                "linkLabel": ""
+              },
+              "tooltipFormat": {
+                "tooltip": "to Azure Portal"
+              }
+            },
+            {
+              "columnMatch": "subscriptionId",
+              "formatter": 15,
+              "formatOptions": {
+                "linkTarget": null,
+                "showIcon": true
+              }
+            }
+          ],
+          "rowLimit": 10000,
+          "filter": true,
+          "labelSettings": [
+            {
+              "columnId": "riskLevelText",
+              "label": "riskLevel"
+            }
+          ]
+        },
+        "sortBy": []
+      },
+      "conditionalVisibility": {
+        "parameterName": "SelectedTab",
+        "comparison": "isEqualTo",
+        "value": "AWSTab"
+      },
+      "name": "リスク別推奨事項詳細 - AWS",
+      "styleSettings": {
+        "showBorder": true
+      }
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "securityresources \r\n| where type =~ \"microsoft.security/assessments\"\r\n| extend assessmentType = (tostring(properties.metadata.assessmentType))\r\n| extend assessmentTypeSkimmed = case(\r\n                    tostring(properties.metadata.assessmentType) == \"BuiltIn\", \"BuiltIn\",\r\n                    tostring(properties.metadata.assessmentType) == \"BuiltInPolicy\", \"BuiltIn\",\r\n                    tostring(properties.metadata.assessmentType) == \"CustomPolicy\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"CustomerManaged\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"ManualCustomPolicy\", \"Custom\",\r\n                    tostring(properties.metadata.assessmentType) == \"ManualBuiltInPolicy\", \"BuiltIn\",\r\n                    dynamic(null)\r\n                    )\r\n| extend assessmentId = tolower(id)\r\n| extend assessmentKey = name\r\n| extend source = tostring(properties.resourceDetails.Source)\r\n| extend resourceId = tostring(properties.resourceDetails.ResourceId)\r\n| extend displayName = tostring(properties.displayName)\r\n| extend statusCode = tostring(properties.status.code)\r\n| extend severity = tostring(properties.metadata.severity)\r\n| extend severityLevel = (\r\n                case( severity =~ \"Critical\", 4,\r\n                  severity =~ \"High\", 3,\r\n                  severity =~ \"Medium\", 2,\r\n                  severity =~ \"Low\", 1,\r\n                  0))\r\n| extend riskLevelText = tostring(properties.risk.level)\r\n| extend riskLevel = (\r\n                case(riskLevelText =~ \"Critical\", 4,\r\n                  riskLevelText =~ \"High\", 3,\r\n                  riskLevelText =~ \"Medium\", 2,\r\n                  riskLevelText =~ \"Low\", 1,\r\n                  0))\r\n| extend riskFactors = iff(isnull(properties.risk.riskFactors), dynamic([]), properties.risk.riskFactors)\r\n| extend statusCause = tostring(properties.status.cause)\r\n| extend isExempt = iff(statusCause == \"Exempt\", tobool(1), tobool(0))\r\n| extend firstEvaluationDate = tostring(todatetime(properties.status.firstEvaluationDate))\r\n| extend statusChangeDate = tostring(todatetime(properties.status.statusChangeDate))\r\n| extend url  = strcat(\"https://\", tostring(properties.links.azurePortal))\r\n| project tenantId, subscriptionId,resourceGroup, resourceId, source, displayName, statusCode, severity, severityLevel, riskLevelText, riskLevel, riskFactors, isExempt, statusCause, firstEvaluationDate, statusChangeDate, assessmentType, assessmentTypeSkimmed, assessmentKey, url\r\n// ブックのパラメータでフィルタ\r\n| extend severityFilter = tostring(\"{riskLevel}\"), environmentFilter = tostring(\"{environment}\")\r\n| where severityFilter has riskLevelText and environmentFilter has source\r\n// --- ここまで共通 ---\r\n| where source == \"GCP\"\r\n| where statusCode == \"Unhealthy\"\r\n// 前段の選択内容でフィルタ\r\n| where subscriptionId == tostring(\"{subscriptionIdFilter}\") and resourceGroup == tostring(\"{resourceGroupFilter}\") and displayName == tostring(\"{displayNameFilter}\") and riskLevel== tostring(\"{riskLevelFilter}\") \r\n| extend elapsedDays = round((now() - todatetime(statusChangeDate)) / 1d, 0)\r\n| project resourceGroup, resourceId, displayName, severity, riskLevelText, riskLevel, riskFactors, elapsedDays, url\r\n| order by riskLevel desc\r\n\r\n\r\n\r\n",
+        "size": 0,
+        "title": "リスク別推奨事項詳細 - GCP",
+        "showExportToExcel": true,
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{subscriptions}"
+        ],
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "resourceId",
+              "formatter": 13,
+              "formatOptions": {
+                "linkTarget": null,
+                "showIcon": true
+              }
+            },
+            {
+              "columnMatch": "severity",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "High",
+                    "representation": "Sev1",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Medium",
+                    "representation": "Sev2",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Low",
+                    "representation": "Sev3",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Critical",
+                    "representation": "Sev0",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "unknown",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "riskLevelText",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Critical",
+                    "representation": "4",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "High",
+                    "representation": "3",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Medium",
+                    "representation": "2",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Low",
+                    "representation": "1",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "unknown",
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "riskLevel",
+              "formatter": 5
+            },
+            {
+              "columnMatch": "elapsedDays",
+              "formatter": 8,
+              "formatOptions": {
+                "min": 0,
+                "max": 90,
+                "palette": "redBright"
+              }
+            },
+            {
+              "columnMatch": "url",
+              "formatter": 7,
+              "formatOptions": {
+                "linkTarget": "Url",
+                "linkLabel": ""
+              },
+              "tooltipFormat": {
+                "tooltip": "to Azure Portal"
+              }
+            },
+            {
+              "columnMatch": "subscriptionId",
+              "formatter": 15,
+              "formatOptions": {
+                "linkTarget": null,
+                "showIcon": true
+              }
+            }
+          ],
+          "rowLimit": 10000,
+          "filter": true,
+          "labelSettings": [
+            {
+              "columnId": "riskLevelText",
+              "label": "riskLevel"
+            }
+          ]
+        },
+        "sortBy": []
+      },
+      "conditionalVisibility": {
+        "parameterName": "SelectedTab",
+        "comparison": "isEqualTo",
+        "value": "GCPTab"
+      },
+      "name": "リスク別推奨事項詳細 - GCP",
+      "styleSettings": {
+        "showBorder": true
+      }
+    }
+  ],
+  "fallbackResourceIds": [
+    "Azure Security Center"
+  ],
+  "fromTemplateId": "community-Workbooks/Azure Security Center/Active Recommendations",
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

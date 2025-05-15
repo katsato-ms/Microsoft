@@ -152,7 +152,7 @@
                                         },
                                         "method": "post",
                                         "body": {
-                                            "To": "azureuser@celesteclouds.com",
+                                            "To": "user@example489724907.com",
                                             "Subject": "Sentinel Insident: @{triggerBody()?['object']?['properties']?['title']}",
                                             "Body": "<p class=\"editor-paragraph\">Title</p><p class=\"editor-paragraph\">@{triggerBody()?['object']?['properties']?['title']}</p><br><p class=\"editor-paragraph\">Description</p><p class=\"editor-paragraph\">@{triggerBody()?['object']?['properties']?['description']}</p><br><p class=\"editor-paragraph\">Severity</p><p class=\"editor-paragraph\">@{triggerBody()?['object']?['properties']?['severity']}</p>",
                                             "Importance": "Normal"

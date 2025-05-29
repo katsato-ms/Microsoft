@@ -1,0 +1,71 @@
+{
+  "properties": {
+    "displayName": "Custom: Configure NSG if NIC does not have specific one",
+    "policyType": "Custom",
+    "mode": "Indexed",
+    "description": "Configure NSG if NIC does not have specific one",
+    "metadata": {
+      "category": "Network",
+      "version": "1.0.0"
+    },
+    "version": "1.0.0",
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "効果",
+          "description": "ポリシーの実行を有効または無効にします"
+        },
+        "allowedValues": [
+          "Modify",
+          "Disabled"
+        ],
+        "defaultValue": "Modify"
+      },
+      "allowedNSGId": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Allowed NSG Resource ID",
+          "description": "NSG resource ID that are allowed to be associated with VM NICs."
+        }
+      }
+    },
+    "policyRule": {
+      "if": {
+        "allOf": [
+          {
+            "field": "type",
+            "equals": "Microsoft.Network/networkInterfaces"
+          },
+          {
+            "field": "Microsoft.Network/networkInterfaces/virtualMachine.id",
+            "exists": "true"
+          },
+          {
+            "field": "Microsoft.Network/networkInterfaces/networkSecurityGroup.id",
+            "notEquals": "[parameters('allowedNSGId')]"
+          }
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]",
+        "details": {
+          "roleDefinitionIds": [
+            "/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c"
+          ],
+          "conflictEffect": "audit",
+          "operations": [
+            {
+              "operation": "addOrReplace",
+              "field": "Microsoft.Network/networkInterfaces/networkSecurityGroup.id",
+              "value": "[parameters('allowedNSGId')]"
+            }
+          ]
+        }
+      }
+    },
+    "versions": [
+      "1.0.0"
+    ]
+  }
+}

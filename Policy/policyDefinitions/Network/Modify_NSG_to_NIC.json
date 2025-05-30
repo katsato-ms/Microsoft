@@ -13,8 +13,8 @@
       "effect": {
         "type": "String",
         "metadata": {
-          "displayName": "効果",
-          "description": "ポリシーの実行を有効または無効にします"
+          "displayName": "Effect",
+          "description": "Select Modify to change the NSG associated with the NIC, or Disabled to not apply this policy."
         },
         "allowedValues": [
           "Modify",

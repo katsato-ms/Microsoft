@@ -4,5 +4,5 @@ This Logic Apps template utilizes entity information from Sentinel incidents, ch
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fkatsato-ms%2FMicrosoft%2Fmain%2FLogic%2520Apps%2FCheck-FalsePositiveByAI%2Fazuredeploy.json)
 [![Deploy to Azure Gov](https://aka.ms/deploytoazuregovbutton)](https://portal.azure.us/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fkatsato-ms%2FMicrosoft%2Fmain%2FLogic%2520Apps%2FCheck-FalsePositiveByAI%2Fazuredeploy.json)
 
-デプロイ後、Azure OpenAI と ip2location の API 接続を更新する必要があります。  
-After deployment, you need to update the API connections for Azure OpenAI and ip2location. 
+デプロイ後は、Azure OpenAI と ip2location の API 接続を更新し、マネージド ID に Sentinel Responder ロールを割り当てる必要があります。
+After deployment, you need to update the API connections for Azure OpenAI and ip2location, and assign the Sentinel Responder role to the managed identity.

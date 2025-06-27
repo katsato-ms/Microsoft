@@ -125,10 +125,6 @@
                                     {
                                         "name": "content",
                                         "type": "string"
-                                    },
-                                    {
-                                        "name": "mailAddress",
-                                        "type": "string"
                                     }
                                 ]
                             }

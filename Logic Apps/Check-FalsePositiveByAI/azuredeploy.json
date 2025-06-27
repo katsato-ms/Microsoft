@@ -265,7 +265,7 @@
                                 "and": [
                                     {
                                         "equals": [
-                                            "@body('Parse_JSON_content')?['falsePositive']",
+                                            "@bool(body('Parse_JSON_content')?['falsePositive'])",
                                             true
                                         ]
                                     }

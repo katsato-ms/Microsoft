@@ -1,0 +1,375 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "PlaybookName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of the Logic Apps resource to be created"
+            }
+        },
+        "Location": {
+            "defaultValue": "[resourceGroup().location]",
+            "type": "string",
+            "metadata": {
+                "description": "Location of the Logic Apps resource to be created"
+            }
+        }
+    },
+    "variables": {
+        "azuresentinel": "[concat('azuresentinel-', parameters('PlaybookName'))]",
+        "azureopenai": "[concat('azureopenai-', parameters('PlaybookName'))]",
+        "ip2locationip": "[concat('ip2locationip-', parameters('PlaybookName'))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2016-06-01",
+            "name": "[variables('azuresentinel')]",
+            "location": "[parameters('Location')]",
+            "kind": "V1",
+            "properties": {
+                "displayName": "[parameters('PlaybookName')]",
+                "customParameterValues": {
+                },
+                "parameterValueSet": {
+                    "name": "managedIdentityAuth",
+                    "values": {}
+                },
+                "api": {
+                    "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azuresentinel')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2016-06-01",
+            "name": "[variables('azureopenai')]",
+            "location": "[parameters('Location')]",
+            "properties": {
+                "displayName": "[parameters('PlaybookName')]",
+                "customParameterValues": {},
+                "api": {
+                    "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azureopenai')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2016-06-01",
+            "name": "[variables('ip2locationip')]",
+            "location": "[parameters('Location')]",
+            "kind": "V1",
+            "properties": {
+                "displayName": "[parameters('PlaybookName')]",
+                "customParameterValues": {},
+                "api": {
+                    "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/ip2locationip')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('PlaybookName')]",
+            "location": "[parameters('Location')]",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/connections', variables('azuresentinel'))]",
+                "[resourceId('Microsoft.Web/connections', variables('azureopenai'))]",
+                "[resourceId('Microsoft.Web/connections', variables('ip2locationip'))]"
+            ],
+            "properties": {
+                "state": "Enabled",
+"definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Microsoft_Sentinel_incident": {
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "body": {
+                                    "callback_url": "@listCallbackUrl()"
+                                },
+                                "path": "/incident-creation"
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Initialize_variables": {
+                            "runAfter": {},
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "tmp",
+                                        "type": "string"
+                                    },
+                                    {
+                                        "name": "whois",
+                                        "type": "string"
+                                    },
+                                    {
+                                        "name": "content",
+                                        "type": "string"
+                                    },
+                                    {
+                                        "name": "mailAddress",
+                                        "type": "string"
+                                    }
+                                ]
+                            }
+                        },
+                        "Creates_a_completion_for_the_chat_message": {
+                            "runAfter": {
+                                "Set_variable_whois": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azureopenai']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": {
+                                    "messages": [
+                                        {
+                                            "role": "system",
+                                            "content": "Sentinel で検出したインシデントについて、調査要否を判断する AI エージェントです。入力される情報はインシデントのエンティティであるユーザー、IP アドレス、URL、ホスト (マシン)、ファイルの情報です。IP アドレスは whois を検索し、国情報と保有組織を取得してください。以下のいずれかの条件に合致する場合、正規の操作とみなし過検知と判断します。\n- ユーザーがシステムアカウントもしくはゲストユーザーと考えられる場合\n- すべての IP アドレスの所有者が Microsoft の場合\n- ユーザーの所属国とすべての IP アドレス国情報が一致する場合\n- ファイル名にテストや test などテスト用であることを示唆する場合\n\n上記に基づき、以下の JSON フォーマットで応答してください。\n{\"falsePositive\": \"true or false\", \"reason\": \"日本語で判断基準と判断のもとになった情報を出力\"}\n"
+                                        },
+                                        {
+                                            "role": "user",
+                                            "content": "@{triggerBody()?['object']?['properties']?['relatedEntities']},@{variables('whois')}"
+                                        }
+                                    ],
+                                    "temperature": 1,
+                                    "top_p": 1,
+                                    "stream": false,
+                                    "max_tokens": 4096,
+                                    "presence_penalty": 0,
+                                    "frequency_penalty": 0,
+                                    "n": 1,
+                                    "seed": 0,
+                                    "logprobs": false,
+                                    "response_format": {
+                                        "type": "text"
+                                    }
+                                },
+                                "path": "/2024-02-15-preview/deployments/@{encodeURIComponent('gpt-4.1')}/chat/completions",
+                                "queries": {
+                                    "api-version": "2024-12-01-preview"
+                                }
+                            }
+                        },
+                        "For_each_1": {
+                            "foreach": "@body('Creates_a_completion_for_the_chat_message')['choices']",
+                            "actions": {
+                                "Set_variable_content": {
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                        "name": "content",
+                                        "value": "@item()?['message']?['content']"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Creates_a_completion_for_the_chat_message": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        },
+                        "Parse_JSON_content": {
+                            "runAfter": {
+                                "For_each_1": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ParseJson",
+                            "inputs": {
+                                "content": "@variables('content')",
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "falsePositive": {
+                                            "type": "string"
+                                        },
+                                        "reason": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "Condition": {
+                            "actions": {
+                                "Update_incident": {
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                            }
+                                        },
+                                        "method": "put",
+                                        "body": {
+                                            "incidentArmId": "@triggerBody()?['object']?['id']",
+                                            "status": "Closed",
+                                            "classification": {
+                                                "ClassificationAndReason": "FalsePositive - IncorrectAlertLogic",
+                                                "ClassificationReasonText": "@body('Parse_JSON_content')?['reason']"
+                                            }
+                                        },
+                                        "path": "/Incidents"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Parse_JSON_content": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "else": {
+                                "actions": {
+                                    "Add_comment_to_incident_(V3)_reason": {
+                                        "type": "ApiConnection",
+                                        "inputs": {
+                                            "host": {
+                                                "connection": {
+                                                    "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                                }
+                                            },
+                                            "method": "post",
+                                            "body": {
+                                                "incidentArmId": "@triggerBody()?['object']?['id']",
+                                                "message": "<p class=\"editor-paragraph\">@{body('Parse_JSON_content')?['reason']}</p>"
+                                            },
+                                            "path": "/Incidents/Comment"
+                                        }
+                                    }
+                                }
+                            },
+                            "expression": {
+                                "and": [
+                                    {
+                                        "equals": [
+                                            "@body('Parse_JSON_content')?['falsePositive']",
+                                            true
+                                        ]
+                                    }
+                                ]
+                            },
+                            "type": "If"
+                        },
+                        "Entities_-_Get_IPs": {
+                            "runAfter": {
+                                "Initialize_variables": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                                "path": "/entities/ip"
+                            }
+                        },
+                        "For_each_IPs": {
+                            "foreach": "@body('Entities_-_Get_IPs')?['IPs']",
+                            "actions": {
+                                "Lookup_IP": {
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['ip2locationip']['connectionId']"
+                                            }
+                                        },
+                                        "method": "get",
+                                        "path": "/",
+                                        "queries": {
+                                            "ip": "@items('For_each_IPs')?['Address']"
+                                        }
+                                    }
+                                },
+                                "Append_to_string_variable_tmp": {
+                                    "runAfter": {
+                                        "Lookup_IP": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "AppendToStringVariable",
+                                    "inputs": {
+                                        "name": "tmp",
+                                        "value": "@body('Lookup_IP')"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Entities_-_Get_IPs": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        },
+                        "Set_variable_whois": {
+                            "runAfter": {
+                                "For_each_IPs": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "SetVariable",
+                            "inputs": {
+                                "name": "whois",
+                                "value": "@concat('[',replace(variables('tmp'),'}{','},{'),']')"
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuresentinel": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('azuresentinel'))]",
+                                "connectionName": "[variables('azuresentinel')]",
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId,'/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azuresentinel')]"
+                            },
+                            "azureopenai": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('azureopenai'))]",
+                                "connectionName": "[variables('azureopenai')]",
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azureopenai')]"
+                            },
+                            "ip2locationip": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('ip2locationip'))]",
+                                "connectionName": "[variables('ip2locationip')]",
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/ip2locationip')]"
+                             }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

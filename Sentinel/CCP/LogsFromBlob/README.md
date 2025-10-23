@@ -75,7 +75,7 @@ The following information is required when configuring the data connector:
 1. Access Microsoft Sentinel portal
 2. Select **Data connectors** → **Logs From Blob Storage (CCP)**
 3. Enter required information:
-   - Service Principal ID
+   - Service Principal ID (selectable after clicking `Grant tenant-wide admin consent` button)
    - Blob Container URI
    - Storage Account details
 4. Click **Connect**
@@ -180,7 +180,7 @@ Azure Blob Storage → Event Grid → Storage Queue → Microsoft Sentinel Data 
 1. Microsoft Sentinel ポータルにアクセス
 2. **データコネクタ** → **Logs From Blob Storage (CCP)** を選択
 3. 必要な情報を入力：
-   - Service Principal ID
+   - Service Principal ID (`Grant tenant-wide admin consent` ボタンで同意することで選択可能)
    - Blob Container URI
    - Storage Account の詳細情報
 4. **接続** をクリック

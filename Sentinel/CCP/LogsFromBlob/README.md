@@ -65,7 +65,7 @@ The following information is required when configuring the data connector:
 
 ### Deploy with Azure Portal
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FMicrosoft%2FSentinel%2FCCP%2FLogsFromBlob%2FmainTemplate-CCP-LogsFromBlob.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fkatsato-ms%2FMicrosoft%2Frefs%2Fheads%2Fmain%2FSentinel%2FCCP%2FLogsFromBlob%2FmainTemplate-CCP-LogsFromBlob.json)
 
 
 ## Configuration Steps
@@ -170,7 +170,7 @@ Azure Blob Storage → Event Grid → Storage Queue → Microsoft Sentinel Data 
 
 ### Azure Portal でのデプロイ
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FMicrosoft%2FSentinel%2FCCP%2FLogsFromBlob%2FmainTemplate-CCP-LogsFromBlob.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fkatsato-ms%2FMicrosoft%2Frefs%2Fheads%2Fmain%2FSentinel%2FCCP%2FLogsFromBlob%2FmainTemplate-CCP-LogsFromBlob.json)
 
 
 ## 設定手順

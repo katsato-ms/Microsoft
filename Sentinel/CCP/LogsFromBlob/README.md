@@ -106,10 +106,7 @@ Schema for the created custom table `LogsFromBlob_CL` (assumes format when vario
 ```
 
 It's also possible to configure individual columns and use transformation rules to convert to appropriate format.
-
-:::message
 When collecting diagnostic logs, you cannot retrieve logs from a BLOB that is still being appended to. Therefore, you need to move the fully appended BLOB to another container using a tool such as azcopy, and then collect the logs from that container.
-:::
 
 ---
 
@@ -221,9 +218,6 @@ LogsFromBlob_CL
 ```
 
 個別にカラムを設定の上で変換ルールを使用し、適切な形式に変換することも可能です。
-
-:::message
-診断ログを取得する場合、追記中の BLOB はログ取得できないため、ログがすべて追記された状態の BLOB を azcopy 等で別のコンテナに移動させ、そのコンテナからログ取得する必要があります。
-:::
+なお、診断ログを取得する場合、追記中の BLOB はログ取得できないため、ログがすべて追記された状態の BLOB を azcopy 等で別のコンテナに移動させ、そのコンテナからログ取得する必要があります。
 
 
